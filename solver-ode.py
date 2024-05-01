@@ -85,8 +85,9 @@ class NeuralNetwork(nn.Module):
 
         
     
-    def y_bar_scaling(self, x, y_hat, domain_ends, bcs):
-        a, b = domain_ends
+    def y_bar_scaling(self, x, y_hat):
+        bcs = self.bvp.bcs
+        a, b = self.bvp.domain_ends
         y_a, y_b = bcs['a'][1], bcs['b'][1]
 
         # 1st scaling option (seems to work well)
@@ -101,7 +102,7 @@ class NeuralNetwork(nn.Module):
     def forward(self, x):
         if self.bar_approach:
             y_hat = self.stack(x)
-            y_bar = self.y_bar_scaling(x, y_hat, self.bvp.domain_ends, self.bvp.bcs)
+            y_bar = self.y_bar_scaling(x, y_hat)
             return y_bar
         else:
             return self.stack(x)
@@ -135,11 +136,8 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
             # Define the closure function for LBFGS
             def closure():
                 optimiser.zero_grad()
-                if loss_class.bar_approach:
-                    y_hat = model(x_train)
-                    y_pred = y_bar_scaling(x_train, y_hat, bvp.domain_ends, bvp.bcs)
-                else:
-                    y_pred = model(x_train)
+
+                y_pred = model(x_train)
                 # y_pred.requires_grad_(True)
                 loss = loss_class.forward(x_train, y_pred)
                 loss.backward()
@@ -255,7 +253,7 @@ if BVP_NO == 0:
     g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
     exact_sol = lambda x: 1 + x * (1 - x)
     
-    no_epochs = 1000
+    no_epochs = 300
     learning_rate = 0.004
 elif BVP_NO == 1:
     # BVP with boundary layer solution
@@ -336,6 +334,8 @@ elif BVP_NO == 4:
 elif BVP_NO == 5:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 
+# TRAINING POINTS
+
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1)
 x_train = x_train.to(torch.float32).requires_grad_(True)
@@ -343,14 +343,15 @@ x_train = x_train.to(torch.float32).requires_grad_(True)
 # MODEL
 ANN_width = 50
 ANN_depth = 1
-
-# TRAIN THE MODEL, RESET IT EACH TIME
 model = NeuralNetwork(my_bvp, 1, 1, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
 
+# OPTIMISER
 optimiser = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+
+# Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)
 
-
+# PLOTTING
 plot_predictions(model, x_train, exact_sol_func=exact_sol)
 
 plot_loss_vs_epoch(loss_values)
