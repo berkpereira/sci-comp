@@ -384,7 +384,18 @@ elif BVP_NO == 8:
 
     no_epochs = 8000
     learning_rate = 0.001
-
+elif BVP_NO == 9:
+    alphas = (64, 0, 1)
+    ns = (1, 1, 1)
+    # Right domain end is about x = 2.55
+    domain_ends = (0, 3 * np.pi / 8)
+    bcs = {'a':('dirichlet', 1),
+        'b':('neumann', 0)}
+    g_func = lambda x: 0
+    exact_sol = lambda x: np.cos(8 * x) # UNIQUE solution
+    
+    no_epochs = 30000
+    learning_rate = 0.0008
 
 # Define BVP (routine)
 my_bvp = BVP(
@@ -412,6 +423,8 @@ elif BVP_NO == 6:
 elif BVP_NO == 7:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 elif BVP_NO == 8:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+elif BVP_NO == 9:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
