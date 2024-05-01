@@ -86,6 +86,7 @@ class NeuralNetwork(nn.Module):
     def y_bar_scaling(self, x, y_hat):
         bcs = self.bvp.bcs
         a, b = self.bvp.domain_ends
+        a, b = torch.tensor([float(a)], requires_grad=True), torch.tensor([float(b)], requires_grad=True) # make tensor, for taking derivatives
         y_a_type, y_b_type = bcs['a'][0], bcs['b'][0]
         y_a, y_b = bcs['a'][1], bcs['b'][1]
 
@@ -93,21 +94,38 @@ class NeuralNetwork(nn.Module):
             # 1st scaling option (seems to work well)
             y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
             
-            # 2nd scaling option (seems to work badly)
+            # 2nd scaling option (seems to work worse)
             # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
         elif y_a_type == 'dirichlet' and y_b_type == 'neumann':
-            # Wasteful computation of gradients for all y_hat?
-            y_hat_x = torch.autograd.grad(y_hat, x, torch.ones_like(y_hat), create_graph=True)[0]
+            y_hat_b = self.stack(b)
+            # evaluate derivative at x = b
+            y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
             
-            # 1st scaling approach (Kathryn-proposed)
-            y_bar = y_b * x + y_a - a * y_b + (x - a) * (y_hat - y_hat_x[-1] - y_b) / (b - a)
+            # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
+            # y_bar = y_b * x + y_a - a * y_b + (x - a) * (y_hat - y_hat_b - y_hat_x_b) / (b - a)
 
+            # MY FIX to Kathryn proposal
+            y_bar = y_b * x + y_a - a * y_b + (x - a) * ((y_hat - y_hat_b)/(b - a) - y_hat_x_b)
+            
             # 2nd scaling approach (Maria-proposed)
-            # y_bar = y_hat + (y_a - y_hat[0]) + (x - a) * (y_b - y_hat_x[-1])
+            # y_bar = y_hat + (y_a - y_hat[0]) + (x - a) * (y_b - y_hat_x_b)
 
             return y_bar
         elif y_a_type == 'neumann' and y_b_type == 'dirichlet':
-            pass
+            y_hat_a = self.stack(a)
+            # evaluate derivative at x = a
+            y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
+            
+            # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
+            # y_bar = y_a * x + y_b - b * y_a + (x - b) * (y_hat - y_hat_a - y_hat_x_a) / (b - a)
+
+            # MY FIX to Kathryn proposal
+            y_bar = y_a * x + y_b - b * y_a + (b - x) * ((y_hat - y_hat_a)/(b - a) - y_hat_x_a)
+
+            # 2nd scaling approach (Maria-proposed)
+            # y_bar = y_hat + (y_b - y_hat[-1]) + (x - b) * (y_a - y_hat_x_a)
+
+            return y_bar
 
         return y_bar
 
@@ -191,9 +209,8 @@ def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
     
     # Predictions from the neural network
-
-    with torch.no_grad():  # We do not need gradients for plotting
-        y_pred_tensor = model(x_train_tensor)
+    # We DO need gradients sometimes for evaluation (bar approach with Neumann conditions, etc.)
+    y_pred_tensor = model(x_train_tensor)
     y_pred_numpy = y_pred_tensor.detach().numpy().flatten()
 
     # Plot predictions
@@ -214,7 +231,6 @@ def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     plt.show()
 
 def plot_ode_residuals(model, bvp, x_train_tensor):
-    # Ensure no gradients are computed in this analysis
     # Convert the training tensor to numpy for x-axis plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
     
@@ -251,7 +267,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 0
+BVP_NO = 9
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -325,8 +341,52 @@ elif BVP_NO == 5:
     
     no_epochs = 10000
     learning_rate = 0.001
+elif BVP_NO == 6:
+    # BVP proposed by Kathryn for Neumann BCs
+    # ODE: -y'' + y^2 = g(x)
+    # g(x) = 3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4
+    # y(0) = y(1) = 1
+    alphas = (1, 0, -1)
+    ns = (2, 1, 1)
+    domain_ends = (0, 1)
+    bcs = {'a':('dirichlet', 1),
+            'b':('neumann', -1)}
+    g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
+    exact_sol = lambda x: 1 + x * (1 - x)
+    
+    no_epochs = 2000
+    learning_rate = 0.005
+elif BVP_NO == 7:
+    # BVP proposed by Kathryn for Neumann BCs
+    # ODE: -y'' + y^2 = g(x)
+    # g(x) = 3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4
+    # y(0) = y(1) = 1
+    alphas = (1, 0, -1)
+    ns = (2, 1, 1)
+    domain_ends = (0, 1)
+    bcs = {'a':('neumann', 1),
+            'b':('dirichlet', 1)}
+    g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
+    exact_sol = lambda x: 1 + x * (1 - x)
+    
+    no_epochs = 10000
+    learning_rate = 0.004
+elif BVP_NO == 8:
+    # simple cos solution
+    # neumann + dirichlet conditions
+    alphas = (1, 0, 1)
+    ns = (1, 0, 1)
+    domain_ends = (0, 2 * np.pi)
+    bcs = {'a':('neumann', 0),
+        'b':('dirichlet', 1)}
+    g_func = lambda x: 0
+    exact_sol = lambda x: np.cos(x) # UNIQUE soln
 
-# DEFINE BVP 
+    no_epochs = 8000
+    learning_rate = 0.001
+
+
+# Define BVP (routine)
 my_bvp = BVP(
     alphas=alphas,  # Corresponds to alpha0, alpha1, alpha2
     ns=ns,  # Corresponds to n0, n1, n2
@@ -347,9 +407,14 @@ elif BVP_NO == 4:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.0, bar_approach=BAR_APPROACH)
 elif BVP_NO == 5:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+elif BVP_NO == 6:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+elif BVP_NO == 7:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+elif BVP_NO == 8:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1)
 x_train = x_train.to(torch.float32).requires_grad_(True)
