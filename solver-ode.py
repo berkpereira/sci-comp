@@ -186,27 +186,18 @@ class NeuralNetwork(nn.Module):
                 # 2nd scaling option (seems to work worse)
                 # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
             elif bc_type_a == 'dirichlet' and bc_type_b == 'neumann':
-                # y_hat_b = self.stack(b)
-                # evaluate derivative at x = b
-                # y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
-                
                 # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
-                # y_bar = y_b * x + y_a - a * y_b + (x - a) * (y_hat - y_hat_b - y_hat_x_b) / (b - a)
-
-                # MY FIX to Kathryn proposal
-                # y_bar = y_b * x + y_a - a * y_b + (x - a) * ((y_hat - y_hat_b)/(b - a) - y_hat_x_b)
+                # y_bar[:, idx] = y_b * x + y_a - a * y_b + (x - a) * (y_hat[:, idx] - y_hat_b - y_hat_x_b) / (b - a)
                 
                 # 2nd scaling approach (Maria-proposed)
-                # y_bar = y_hat + (y_a - y_hat[0]) + (x - a) * (y_b - y_hat_x_b)
+                # y_bar[:, idx] = y_hat[:, idx] + (y_a - y_hat[0, idx]) + (x - a) * (y_b - y_hat_x_b)
 
                 y_hat_b = self.stack(b)[idx]
                 y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
-                y_bar[:, idx] = bc_value_b * x + bc_value_a - a * bc_value_b + (x - a) * ((y_hat[:, idx] - y_hat_b) / (b - a) - y_hat_x_b)
+                # MY FIX to Kathryn proposal
+                y_bar[:, idx] = torch.squeeze(bc_value_b * x) + bc_value_a - a * bc_value_b + torch.squeeze(x - a) * ((y_hat[:, idx] - y_hat_b) / (b - a) - y_hat_x_b)
 
             elif bc_type_a == 'neumann' and bc_type_b == 'dirichlet':
-                # y_hat_a = self.stack(a)
-                # evaluate derivative at x = a
-                # y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
                 
                 # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
                 # y_bar = y_a * x + y_b - b * y_a + (x - b) * (y_hat - y_hat_a - y_hat_x_a) / (b - a)
@@ -219,7 +210,7 @@ class NeuralNetwork(nn.Module):
 
                 y_hat_a = self.stack(a)[idx]
                 y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
-                y_bar[:, idx] = bc_value_a * x + bc_value_b - b * bc_value_a + (b - x) * ((y_hat[:, idx] - y_hat_a) / (b - a) - y_hat_x_a)
+                y_bar[:, idx] = torch.squeeze(bc_value_a * x) + bc_value_b - b * bc_value_a + torch.squeeze(b - x) * ((y_hat[:, idx] - y_hat_a) / (b - a) - y_hat_x_a)
 
         return y_bar
 
@@ -375,7 +366,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 0
+BVP_NO = 8
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -399,7 +390,6 @@ if BVP_NO == 0:
     bcs = (
         (('dirichlet', 1), ('dirichlet', 1)),
     )
-    g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
     exact_sol = lambda x: 1 + x * (1 - x)
     
     no_epochs = 300
@@ -465,12 +455,16 @@ elif BVP_NO == 6:
     # ODE: -y'' + y^2 = g(x)
     # g(x) = 3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4
     # y(0) = y(1) = 1
-    alphas = (1, 0, -1)
-    ns = (2, 1, 1)
     domain_ends = (0, 1)
-    bcs = {'a':('dirichlet', 1),
-            'b':('neumann', -1)}
-    g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
+    bcs = (
+        (('dirichlet', 1), ('neumann', -1)),
+    )
+
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4 + y_xx[:, 0]) - y[:,0]**2
+    
+    # Each function in this list should return a 1D tensor (length = number of points in x)
+    ODE_funcs = [eqn1]
     exact_sol = lambda x: 1 + x * (1 - x)
     
     no_epochs = 2000
@@ -485,6 +479,7 @@ elif BVP_NO == 7:
     domain_ends = (0, 1)
     bcs = {'a':('neumann', 1),
             'b':('dirichlet', 1)}
+
     g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
     exact_sol = lambda x: 1 + x * (1 - x)
     
@@ -493,11 +488,15 @@ elif BVP_NO == 7:
 elif BVP_NO == 8:
     # simple cos solution
     # neumann + dirichlet conditions
-    alphas = (1, 0, 1)
-    ns = (1, 0, 1)
     domain_ends = (0, 2 * np.pi)
-    bcs = {'a':('neumann', 0),
-        'b':('dirichlet', 1)}
+    bcs = (
+        (('neumann', 0), ('dirichlet', 1)),
+    )
+
+    def eqn1(x, y, y_x, y_xx):
+        return y[:,0] + torch.squeeze(y_xx[:,0])
+
+    ODE_funcs = [eqn1]
     g_func = lambda x: 0
     exact_sol = lambda x: np.cos(x) # UNIQUE soln
 
@@ -518,19 +517,8 @@ elif BVP_NO == 9:
 elif BVP_NO == 10:
     alphas = torch.zeros(2, 2, 3)
     ns = torch.ones_like(alphas)
-    alphas[0, 0] = ()
 
 # Define BVP (routine)
-"""
-my_bvp = BVP(
-    alphas=alphas,  # Corresponds to alpha0, alpha1, alpha2
-    ns=ns,  # Corresponds to n0, n1, n2
-    g_func=g_func,
-    domain_ends=domain_ends,
-    bcs=bcs
-)
-"""
-
 my_bvp = BVPflexible(
     ODE_funcs=ODE_funcs,
     domain_ends=domain_ends,
