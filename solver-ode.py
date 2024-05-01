@@ -265,14 +265,14 @@ if BVP_NO == 0:
 elif BVP_NO == 1:
     # BVP with boundary layer solution
     g_func=lambda x: 1
-    alphas = (0, 1, -0.1)
+    alphas = (0, 1, -0.02)
     ns = (1, 1, 1)
     domain_ends = (0, 1)
     bcs = (0, 0)
     exact_sol = None
     
     no_epochs = 10000
-    learning_rate = 0.05
+    learning_rate = 0.008
 elif BVP_NO == 2:
     alphas = (64, 0, 1)
     ns = (1, 1, 1)
@@ -293,7 +293,7 @@ elif BVP_NO == 3:
     exact_sol = lambda x: np.sin(x) * x
 
     no_epochs = 20000
-    learning_rate = 0.01
+    learning_rate = 0.001
 elif BVP_NO == 4:
     alphas = (1, 0, 1)
     ns = (1, 0, 1)
@@ -302,7 +302,7 @@ elif BVP_NO == 4:
     g_func = lambda x: 0
     exact_sol = lambda x: - np.sin(x)
 
-    no_epochs = 12000
+    no_epochs = 5000
     learning_rate = 0.002
 elif BVP_NO == 5:
     # BVP proposed by Kathryn for y_bar approach
@@ -348,8 +348,8 @@ x_train = torch.tensor(training_points).reshape(len(training_points), 1)
 x_train = x_train.to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 50
-ANN_depth = 1
+ANN_width = 5
+ANN_depth = 2
 
 # TRAIN THE MODEL, RESET IT EACH TIME
 model = NeuralNetwork(my_bvp, 1, 1, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
