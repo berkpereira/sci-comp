@@ -83,18 +83,32 @@ class NeuralNetwork(nn.Module):
         # Create the sequential model
         self.stack = nn.Sequential(*layers)
 
-        
-    
     def y_bar_scaling(self, x, y_hat):
         bcs = self.bvp.bcs
         a, b = self.bvp.domain_ends
+        y_a_type, y_b_type = bcs['a'][0], bcs['b'][0]
         y_a, y_b = bcs['a'][1], bcs['b'][1]
 
-        # 1st scaling option (seems to work well)
-        y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
+        if y_a_type == 'dirichlet' and y_b_type == 'dirichlet':
+            # 1st scaling option (seems to work well)
+            y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
+            
+            # 2nd scaling option (seems to work badly)
+            # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
+        elif y_a_type == 'dirichlet' and y_b_type == 'neumann':
+            # Wasteful computation of gradients for all y_hat?
+            y_hat_x = torch.autograd.grad(y_hat, x, torch.ones_like(y_hat), create_graph=True)[0]
+            
+            # 1st scaling approach (Kathryn-proposed)
+            y_bar = y_b * x + y_a - a * y_b + (x - a) * (y_hat - y_hat_x[-1] - y_b) / (b - a)
 
-        # 2nd scaling option (seems to work badly)
-        # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
+            # 2nd scaling approach (Maria-proposed)
+            # y_bar = y_hat + (y_a - y_hat[0]) + (x - a) * (y_b - y_hat_x[-1])
+
+            return y_bar
+        elif y_a_type == 'neumann' and y_b_type == 'dirichlet':
+            pass
+
         return y_bar
 
 
