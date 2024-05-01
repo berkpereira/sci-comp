@@ -60,7 +60,6 @@ class BVPflexible:
         self.ODE_func = ODE_func
         self.domain_ends = domain_ends
         self.bcs = bcs
-        self.dim = len(self.ODE_funcs) # dimension of system
 
     # y-related inputs should be vectors as appropriate in ODE system cases
     def eval_ode(self, x, y, y_x, y_xx):
@@ -199,6 +198,7 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
         if epoch % 100 == 0:
             print(f"Epoch: {epoch} | Loss: {loss.item():e}")
     return loss_values  # Return the list of loss values
+
 def plot_loss_vs_epoch(loss_values):
     plt.figure(figsize=FIGSIZE)
     plt.plot(loss_values, label='Training Loss', color='blue')
@@ -208,6 +208,7 @@ def plot_loss_vs_epoch(loss_values):
     plt.yscale('log')  # Set the y-axis to logarithmic scale
     plt.legend()
     plt.show()
+
 def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     # Convert the training tensor to numpy for plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
@@ -261,34 +262,37 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
 """
 ENTERING RELEVANT PARAMETERS
 """
-BVP_NO = 9
+BVP_NO = 1
 BAR_APPROACH = True
 if BVP_NO == 0:
     # BVP proposed by Kathryn
     # ODE: -y'' + y^2 = g(x)
     # g(x) = 3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4
     # y(0) = y(1) = 1
-    alphas = (1, 0, -1)
-    ns = (2, 1, 1)
     domain_ends = (0, 1)
     bcs = {'a':('dirichlet', 1),
             'b':('dirichlet', 1)}
-    g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
+    def ODE_func(x, y, y_x, y_xx):
+        return y_xx - y**2 + 3 + 2*x - x**2 - 2*x**3 + x**4
+
     exact_sol = lambda x: 1 + x * (1 - x)
     
     no_epochs = 300
     learning_rate = 0.004
 elif BVP_NO == 1:
     # BVP with boundary layer solution
-    g_func=lambda x: 1
-    alphas = (0, 1, -0.02)
-    ns = (1, 1, 1)
+    eps = 0.02
+    
+    def ODE_func(x, y, y_x, y_xx):
+        return y_x - eps * y_xx - 1
+    
     domain_ends = (0, 1)
-    bcs = (0, 0)
+    bcs = {'a':('dirichlet', 1),
+           'b':('dirichlet', 1)}
     exact_sol = None
     
-    no_epochs = 10000
-    learning_rate = 0.008
+    no_epochs = 12000
+    learning_rate = 0.0075
 elif BVP_NO == 2:
     alphas = (64, 0, 1)
     ns = (1, 1, 1)
@@ -389,13 +393,8 @@ elif BVP_NO == 9:
     learning_rate = 0.0008
 
 # Define BVP (routine)
-my_bvp = BVP(
-    alphas=alphas,  # Corresponds to alpha0, alpha1, alpha2
-    ns=ns,  # Corresponds to n0, n1, n2
-    g_func=g_func,
-    domain_ends=domain_ends,
-    bcs=bcs
-)
+my_bvp = BVPflexible(ODE_func, domain_ends, bcs)
+
 if BVP_NO == 0:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 elif BVP_NO == 1:
