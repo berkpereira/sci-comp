@@ -13,12 +13,14 @@ plt.rcParams.update({
     "font.family": "serif"
 })
 
-
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 6)
 
-
 torch.manual_seed(42)
+
+####################################################################################################
+####################################################################################################
+####################################################################################################
 
 class BVP:
     def __init__(self, alphas, ns, g_func, domain_ends, bcs):
@@ -30,7 +32,7 @@ class BVP:
             ns (tuple): A 3-tuple of powers (n0, n1, n2) for the ODE terms.
             g_func (callable): The right-hand side function g(x).
             domain_ends (tuple): The domain ends (a, b).
-            bcs (tuple): The Dirichlet boundary conditions y(a) and y(b).
+            bcs (dictionary): Separable boundary conditions y(a) and y(b).
         """
         # Unpack the tuples
         self.alpha0, self.alpha1, self.alpha2 = alphas
@@ -81,23 +83,25 @@ class NeuralNetwork(nn.Module):
         # Create the sequential model
         self.stack = nn.Sequential(*layers)
 
-        if self.bar_approach:
-            def y_bar_scaling(x, y_hat, domain_ends, bcs):
-                a, b = domain_ends
-                y_a, y_b = bcs
+        
     
-                # 1st scaling option
-                # y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
+    def y_bar_scaling(self, x, y_hat, domain_ends, bcs):
+        a, b = domain_ends
+        y_a, y_b = bcs['a'][1], bcs['b'][1]
 
-                # 2nd scaling option
-                y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
-                return y_bar
+        # 1st scaling option (seems to work well)
+        y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
+
+        # 2nd scaling option (seems to work badly)
+        # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
+        return y_bar
+
 
 
     def forward(self, x):
         if self.bar_approach:
             y_hat = self.stack(x)
-            y_bar = y_bar_scaling(x, y_hat, self.bvp.domain_ends, self.bvp.bcs)
+            y_bar = self.y_bar_scaling(x, y_hat, self.bvp.domain_ends, self.bvp.bcs)
             return y_bar
         else:
             return self.stack(x)
@@ -117,7 +121,8 @@ class CustomLoss(nn.Module):
         if self.bar_approach:
             return ode_loss
         else:
-            bc_loss = self.gamma * ((y[0] - self.bvp.bcs[0]) ** 2 + (y[-1] - self.bvp.bcs[1]) ** 2)
+            y_a, y_b = bcs['a'][1], bcs['b'][1]
+            bc_loss = self.gamma * ((y[0] - y_a) ** 2 + (y[-1] - y_b) ** 2)
             return ode_loss + bc_loss
     
 def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
@@ -158,17 +163,6 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
             print(f"Epoch: {epoch} | Loss: {loss.item():e}")
 
     return loss_values  # Return the list of loss values
-
-def y_bar_scaling(x, y_hat, domain_ends, bcs):
-    a, b = domain_ends
-    y_a, y_b = bcs
-    
-    # 1st scaling option
-    y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
-
-    # 2nd scaling option
-    # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
-    return y_bar
 
 def plot_loss_vs_epoch(loss_values):
     plt.figure(figsize=FIGSIZE)
@@ -245,7 +239,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 2
+BVP_NO = 0
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -256,12 +250,13 @@ if BVP_NO == 0:
     alphas = (1, 0, -1)
     ns = (2, 1, 1)
     domain_ends = (0, 1)
-    bcs = (1, 1)
+    bcs = {'a':('dirichlet', 1),
+            'b':('dirichlet', 1)}
     g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
     exact_sol = lambda x: 1 + x * (1 - x)
     
-    no_epochs = 1500
-    learning_rate = 0.001
+    no_epochs = 1000
+    learning_rate = 0.004
 elif BVP_NO == 1:
     # BVP with boundary layer solution
     g_func=lambda x: 1
@@ -319,8 +314,6 @@ elif BVP_NO == 5:
     no_epochs = 10000
     learning_rate = 0.001
 
-
-
 # DEFINE BVP 
 my_bvp = BVP(
     alphas=alphas,  # Corresponds to alpha0, alpha1, alpha2
@@ -348,8 +341,8 @@ x_train = torch.tensor(training_points).reshape(len(training_points), 1)
 x_train = x_train.to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 5
-ANN_depth = 2
+ANN_width = 50
+ANN_depth = 1
 
 # TRAIN THE MODEL, RESET IT EACH TIME
 model = NeuralNetwork(my_bvp, 1, 1, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
@@ -363,10 +356,3 @@ plot_predictions(model, x_train, exact_sol_func=exact_sol)
 plot_loss_vs_epoch(loss_values)
 
 plot_ode_residuals(model, my_bvp, x_train)
-
-
-for name, param in model.named_parameters():
-    if param.grad is not None:
-        print(f"Gradients available for {name}")
-    else:
-        print(f"No gradients for {name}")
