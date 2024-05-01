@@ -22,79 +22,7 @@ torch.manual_seed(7)
 ####################################################################################################
 ####################################################################################################
 
-# DEPRECATED BVP class
 class BVP:
-    def __init__(self, alphas, ns, g_func, domain_ends, bcs):
-        """
-        Initializes a boundary value problem for a second-order ODE.
-        Args:
-            alphas (torch.Tensor): A tensor of shape (num_eqs, num_funcs, 3) containing the coefficients 
-                                   for each term in each ODE (i.e., alpha0, alpha1, alpha2 for y, y', y'').
-            ns (torch.Tensor): A tensor of shape (num_eqs, num_funcs, 3) containing the powers 
-                               for each term in each ODE.
-            g_func (callable): The right-hand side function g(x) which should return a torch tensor of values.
-            domain_ends (tuple): The domain ends (a, b).
-            bcs (dict): Boundary conditions with details for each end ('a' and 'b') and possibly for each variable.
-
-        """
-        
-        # The bcs dictionary's form has a lot of info about the BVP
-        self.bcs = bcs
-        
-        # Single ODE case
-        if isinstance(bcs['a'], tuple):
-            self.dim = 1
-            self.alpha0, self.alpha1, self.alpha2 = alphas
-            self.n0, self.n1, self.n2 = ns
-        else:
-            # System of self.dim ODEs
-            self.alphas = alphas # Should be a 3D array. Indexing goes as [eqn #, unknown funcn #, order of derivative]
-            self.dim = alphas.size(0)
-            
-        
-        # g_func should be multi-dimensional whenever appropriate
-        self.g_func = g_func
-
-        # this is always simple
-        self.domain_ends = domain_ends
-
-    # y-related inputs should be vectors as appropriate in ODE system cases
-    def eval_ode(self, x, y, y_x, y_xx):
-        """
-        Evaluates simple residual.
-
-        Args:
-            x (torch.Tensor): Input tensor of independent variable values.
-            y (torch.Tensor): Tensor of shape (num_funcs,) of function values at x.
-            y_x (torch.Tensor): Tensor of shape (num_funcs,) of first derivatives at x.
-            y_xx (torch.Tensor): Tensor of shape (num_funcs,) of second derivatives at x.
-        
-        Returns (in system case):
-            torch.Tensor: A tensor representing the residuals for the system of ODEs.
-        """
-        if self.dim == 1:
-            term2 = self.alpha2 * (y_xx ** self.n2)
-            term1 = self.alpha1 * (y_x ** self.n1)
-            term0 = self.alpha0 * (y ** self.n0)
-            return term2 + term1 + term0 - self.g_func(x)
-        else:
-            derivatives = torch.stack([y, y_x, y_xx], dim=0)  # Shape (3, num_funcs)
-
-            # Compute the terms for each equation using broadcasting:
-            # alphas.shape == (num_eqs, num_funcs, 3)
-            # derivatives.shape == (3, num_funcs)
-            # powers.shape == (num_eqs, num_funcs, 3)
-            terms = self.alphas * derivatives.unsqueeze(0) ** self.ns  # Applying power element-wise
-
-            # Sum over the last dimension to compute the ODE left-hand sides
-            ode_lhs = terms.sum(dim=-1)  # Sum across all derivatives, shape (num_eqs, num_funcs)
-            
-            # Subtract the right-hand side (g(x)) from the ODE left-hand sides
-            residuals = ode_lhs - self.g_func(x)
-
-            return residuals
-
-class BVPflexible:
     def __init__(self, ODE_funcs, domain_ends, bcs):
         """
         Initializes a boundary value problem for a system of second-order ODEs.
@@ -381,8 +309,8 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 10
-BAR_APPROACH = False
+BVP_NO = 11
+BAR_APPROACH = True
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -550,7 +478,7 @@ elif BVP_NO == 10:
         return np.array([1 + x * (1 - x),
                          x**2 * (1 - x)])
 
-    no_epochs = 4000
+    no_epochs = 600
     learning_rate = 0.03
 elif BVP_NO == 11:
     # proof of concept for systems solver. UNCOUPLED equations
@@ -575,11 +503,11 @@ elif BVP_NO == 11:
         return np.array([1 + x * (1 - x),
                          0*x]) # in reality don't know
 
-    no_epochs = 15000
+    no_epochs = 10000
     learning_rate = 0.003
 
 # Define BVP (routine)
-my_bvp = BVPflexible(
+my_bvp = BVP(
     ODE_funcs=ODE_funcs,
     domain_ends=domain_ends,
     bcs=bcs
