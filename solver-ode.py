@@ -14,14 +14,15 @@ plt.rcParams.update({
 })
 
 # DEFAULT FIG SIZE
-FIGSIZE = (10, 6)
+FIGSIZE = (10, 8)
 
-torch.manual_seed(42)
+torch.manual_seed(7)
 
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
 
+# DEPRECATED BVP class
 class BVP:
     def __init__(self, alphas, ns, g_func, domain_ends, bcs):
         """
@@ -234,14 +235,21 @@ class CustomLoss(nn.Module):
     def forward(self, x, y):
         # Assuming y shape is [batch_size, num_equations]
         batch_size, num_equations = y.shape
-        
-        # Calculate derivatives
-        y_x = [torch.autograd.grad(y[:, i], x, torch.ones(y.shape[0], device=y.device), create_graph=True, retain_graph=True)[0] for i in range(num_equations)]
-        y_xx = [torch.autograd.grad(y_x[i][:, 0], x, torch.ones(y.shape[0], device=y.device), create_graph=True, retain_graph=True)[0] for i in range(num_equations)]
-        
-        # Concatenate for batch processing
-        y_x = torch.stack(y_x, dim=-1)
-        y_xx = torch.stack(y_xx, dim=-1)
+
+        # Prepare to collect derivatives
+        y_x = torch.zeros_like(y)
+        y_xx = torch.zeros_like(y)
+
+        # Calculate derivatives individually for each equation to maintain correct shape
+        for i in range(num_equations):
+            # We need to keep y[:, i:i+1] to keep dimensionality for grad
+            y_x[:, i:i+1] = torch.autograd.grad(y[:, i].sum(), x, create_graph=True, allow_unused=True)[0]
+            y_xx[:, i:i+1] = torch.autograd.grad(y_x[:, i].sum(), x, create_graph=True, allow_unused=True)[0]
+
+        # Compute the ODE residuals and their mean squared error
+        ode_loss = torch.mean((self.bvp.eval_ode(x, y, y_x, y_xx) ** 2).sum(dim=1))
+
+
 
         # Compute the ODE residuals and their mean squared error
         ode_loss = torch.mean(self.bvp.eval_ode(x, y, y_x, y_xx) ** 2)
@@ -310,24 +318,31 @@ def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     # Predictions from the neural network
     # We DO need gradients sometimes for evaluation (bar approach with Neumann conditions, etc.)
     y_pred_tensor = model(x_train_tensor)
-    y_pred_numpy = y_pred_tensor.detach().numpy().flatten()
+    y_pred_numpy = y_pred_tensor.detach().numpy()
+    
+    num_equations = y_pred_numpy.shape[1]
+    
+    # Set up the figure with multiple subplots
+    fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
+    
+    if num_equations == 1:
+        axes = [axes]  # make it iterable if only one plot
+    
+    # Plot predictions for each equation
+    for i in range(num_equations):
+        axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
+        if exact_sol_func is not None:
+            y_exact_numpy = exact_sol_func(x_train_numpy)[i]
+            axes[i].plot(x_train_numpy, y_exact_numpy, label=f'Analytical Solution (eq {i+1})', color='b', linestyle='-')
+        
+        axes[i].set_xlabel('x')
+        axes[i].set_ylabel('y')
+        axes[i].legend()
+        axes[i].set_title(f'NN Predictions vs Exact Solution (Eq {i+1})')
 
-    # Plot predictions
-    plt.figure(figsize=FIGSIZE)
-    plt.plot(x_train_numpy, y_pred_numpy, label='NN Predictions', color='r', linestyle='--', marker='o')
-    title_str = 'NN Predictions'
-    
-    # Analytical solution if provided
-    if exact_sol_func is not None:
-        y_exact_numpy = exact_sol_func(x_train_numpy)
-        plt.plot(x_train_numpy, y_exact_numpy, label='Analytical Solution', color='b', linestyle='-')
-        title_str = 'NN Predictions vs Exact Solution'
-    
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.title(title_str)
-    plt.legend()
+    plt.tight_layout()
     plt.show()
+
 
 def plot_ode_residuals(model, bvp, x_train_tensor):
     # Convert the training tensor to numpy for x-axis plotting
@@ -366,8 +381,8 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 8
-BAR_APPROACH = True
+BVP_NO = 10
+BAR_APPROACH = False
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -379,7 +394,7 @@ if BVP_NO == 0:
     # x is 1D tensor
     # y, y_x, y_xx are 2D tensors [num_points, num_unknowns]
     def eqn1(x, y, y_x, y_xx):
-        return torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4 + y_xx[:, 0]) - y[:,0]**2
+        return torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4) + torch.squeeze(y_xx[:, 0]) - y[:,0]**2
     
     # Each function in this list should return a 1D tensor (length = number of points in x)
     ODE_funcs = [eqn1]
@@ -495,9 +510,8 @@ elif BVP_NO == 8:
 
     def eqn1(x, y, y_x, y_xx):
         return y[:,0] + torch.squeeze(y_xx[:,0])
-
     ODE_funcs = [eqn1]
-    g_func = lambda x: 0
+
     exact_sol = lambda x: np.cos(x) # UNIQUE soln
 
     no_epochs = 8000
@@ -515,8 +529,54 @@ elif BVP_NO == 9:
     no_epochs = 30000
     learning_rate = 0.0008
 elif BVP_NO == 10:
-    alphas = torch.zeros(2, 2, 3)
-    ns = torch.ones_like(alphas)
+    # KATHRYN PROPOSED SYSTEM for u(x), v(x)
+    # neumann + dirichlet conditions
+    domain_ends = (0, 1)
+    bcs = (
+        (('dirichlet', 1), ('dirichlet', 1)),
+        (('dirichlet', 0), ('dirichlet', 0)),
+    )
+
+    def eqn1(x, y, y_x, y_xx):
+        return -y_xx[:,0] + torch.squeeze(x) * y[:,0] - y[:,1] - 2 - torch.squeeze(x)
+    
+    def eqn2(x, y, y_x, y_xx):
+        return - torch.squeeze(y_xx[:,1]) + y[:,1] - 6 * torch.squeeze(x) + 2 - torch.squeeze(torch.squeeze(x) ** 2) * (1 - torch.squeeze(x))
+    
+    ODE_funcs = [eqn1,
+                 eqn2]
+
+    def exact_sol(x):
+        return np.array([1 + x * (1 - x),
+                         x**2 * (1 - x)])
+
+    no_epochs = 4000
+    learning_rate = 0.03
+elif BVP_NO == 11:
+    # proof of concept for systems solver. UNCOUPLED equations
+    domain_ends = (0, 1)
+    bcs = (
+        (('dirichlet', 1), ('dirichlet', 1)),
+        (('dirichlet', 0), ('dirichlet', 0)),
+    )
+
+    # simple parabolic solution
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,0]) - torch.squeeze(y[:,0]**2) + torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4)
+    
+    # simple boundary layer
+    def eqn2(x, y, y_x, y_xx):
+        return torch.squeeze(y_x[:,1]) - torch.squeeze(0.03 * y_xx[:,1]) - 1
+    
+    ODE_funcs = [eqn1,
+                 eqn2]
+
+    def exact_sol(x):
+        return np.array([1 + x * (1 - x),
+                         0*x]) # in reality don't know
+
+    no_epochs = 15000
+    learning_rate = 0.003
 
 # Define BVP (routine)
 my_bvp = BVPflexible(
@@ -546,7 +606,10 @@ elif BVP_NO == 8:
 elif BVP_NO == 9:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 elif BVP_NO == 10:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
+elif BVP_NO == 11:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=5, bar_approach=BAR_APPROACH)
+
 
 # TRAINING POINTS
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
@@ -554,8 +617,8 @@ x_train = torch.tensor(training_points).reshape(len(training_points), 1)
 x_train = x_train.to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 50
-ANN_depth = 1
+ANN_width = 8
+ANN_depth = 2
 
 output_features = my_bvp.dim
 input_features = 1
