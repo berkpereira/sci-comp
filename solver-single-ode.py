@@ -130,7 +130,6 @@ class NeuralNetwork(nn.Module):
             
             # 2nd scaling approach (Maria-proposed)
             # y_bar = y_hat + (y_a - y_hat[0]) + (x - a) * (y_b - y_hat_x_b)
-            return y_bar
         elif y_a_type == 'neumann' and y_b_type == 'dirichlet':
             y_hat_a = self.stack(a)
             # evaluate derivative at x = a
@@ -142,7 +141,8 @@ class NeuralNetwork(nn.Module):
             y_bar = y_a * x + y_b - b * y_a + (b - x) * ((y_hat - y_hat_a)/(b - a) - y_hat_x_a)
             # 2nd scaling approach (Maria-proposed)
             # y_bar = y_hat + (y_b - y_hat[-1]) + (x - b) * (y_a - y_hat_x_a)
-            return y_bar
+        elif y_a_type == 'neumann' and y_b_type == 'neumann':
+            pass # Still have to implement 
         return y_bar
     def forward(self, x):
         if self.bar_approach:
