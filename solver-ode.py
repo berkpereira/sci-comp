@@ -61,8 +61,6 @@ class BVP:
         residuals = residuals_temp
         return residuals
 
-
-    
 class NeuralNetwork(nn.Module):
     def __init__(self, bvp, input_features=1, output_features=1, hidden_units=5, depth=1, bar_approach=False):
         """
@@ -316,7 +314,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 4
+BVP_NO = 0
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -334,13 +332,11 @@ if BVP_NO == 0:
     # Each function in this list should return a 1D tensor (length = number of points in x)
     ODE_funcs = [eqn1]
 
-    alphas = (1, 0, -1)
-    ns = (2, 1, 1)
     domain_ends = (0, 1)
     bcs = (
         (('dirichlet', 1), ('dirichlet', 1)),
     )
-    exact_sol = lambda x: 1 + x * (1 - x)
+    exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
     no_epochs = 300
     learning_rate = 0.004
@@ -356,16 +352,21 @@ elif BVP_NO == 1:
     no_epochs = 10000
     learning_rate = 0.008
 elif BVP_NO == 2:
-    alphas = (64, 0, 1)
-    ns = (1, 1, 1)
     # Right domain end is about x = 2.55
-    domain_ends = (0, 9 * np.pi / 16)
-    bcs = (1, 0) # DIRICHLET
-    g_func = lambda x: 0
-    exact_sol = lambda x: np.cos(8 * x) # UNIQUE solution
+    def eqn1(x, y, y_x, y_xx):
+        return 64 * y[:,0] + torch.squeeze(y_xx[:,0])
     
-    no_epochs = 50000
-    learning_rate = 0.0025
+    ODE_funcs = [eqn1]
+
+    domain_ends = (0, 9 * np.pi / 16)
+    bcs = (
+        (('dirichlet', 1),('dirichlet', 0)),
+    )
+    
+    exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
+    
+    no_epochs = 30000
+    learning_rate = 0.003
 elif BVP_NO == 3:
     alphas = (1, 0, 0)
     ns = (1, 0, 0)
@@ -377,6 +378,7 @@ elif BVP_NO == 3:
     no_epochs = 20000
     learning_rate = 0.001
 elif BVP_NO == 4:
+    # Simple exact solution
     def eqn1(x, y, y_x, y_xx):
         return torch.squeeze(y_xx[:,0]) + torch.squeeze(x) - y[:,0]
     
@@ -454,22 +456,28 @@ elif BVP_NO == 8:
         return y[:,0] + torch.squeeze(y_xx[:,0])
     ODE_funcs = [eqn1]
 
-    exact_sol = lambda x: np.cos(x) # UNIQUE soln
+    def exact_sol(x):
+        return np.array([np.cos(x)])
 
-    no_epochs = 8000
-    learning_rate = 0.001
+    no_epochs = 5000
+    learning_rate = 0.008
 elif BVP_NO == 9:
-    alphas = (64, 0, 1)
-    ns = (1, 1, 1)
+    # 64 y + y'' = 0
     # Right domain end is about x = 2.55
-    domain_ends = (0, 3 * np.pi / 8)
-    bcs = {'a':('dirichlet', 1),
-        'b':('neumann', 0)}
-    g_func = lambda x: 0
-    exact_sol = lambda x: np.cos(8 * x) # UNIQUE solution
+    def eqn1(x, y, y_x, y_xx):
+        return 64 * y[:,0] + torch.squeeze(y_xx[:,0])
     
-    no_epochs = 30000
-    learning_rate = 0.0008
+    ODE_funcs = [eqn1]
+
+    domain_ends = (0, 3 * np.pi / 8)
+    bcs = (
+        (('dirichlet', 1),('neumann', 0)),
+    )
+    
+    exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
+    
+    no_epochs = 15000
+    learning_rate = 0.002
 elif BVP_NO == 10:
     # KATHRYN PROPOSED SYSTEM for u(x), v(x)
     # neumann + dirichlet conditions
@@ -558,8 +566,8 @@ training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 5
-ANN_depth = 2
+ANN_width = 50
+ANN_depth = 1
 
 output_features = my_bvp.dim
 input_features = 1
