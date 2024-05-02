@@ -16,7 +16,7 @@ plt.rcParams.update({
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 8)
 
-torch.manual_seed(7)
+torch.manual_seed(42)
 
 ####################################################################################################
 ####################################################################################################
@@ -87,7 +87,6 @@ class NeuralNetwork(nn.Module):
             layers.append(nn.Linear(in_features=hidden_units, out_features=hidden_units))
             layers.append(nn.Sigmoid())
 
-        
         # Add the final layer
         layers.append(nn.Linear(in_features=hidden_units, out_features=output_features))
         
@@ -125,9 +124,7 @@ class NeuralNetwork(nn.Module):
                 y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
                 # MY FIX to Kathryn proposal
                 y_bar[:, idx] = torch.squeeze(bc_value_b * x) + bc_value_a - a * bc_value_b + torch.squeeze(x - a) * ((y_hat[:, idx] - y_hat_b) / (b - a) - y_hat_x_b)
-
             elif bc_type_a == 'neumann' and bc_type_b == 'dirichlet':
-                
                 # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
                 # y_bar = y_a * x + y_b - b * y_a + (x - b) * (y_hat - y_hat_a - y_hat_x_a) / (b - a)
 
@@ -140,10 +137,17 @@ class NeuralNetwork(nn.Module):
                 y_hat_a = self.stack(a)[idx]
                 y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
                 y_bar[:, idx] = torch.squeeze(bc_value_a * x) + bc_value_b - b * bc_value_a + torch.squeeze(b - x) * ((y_hat[:, idx] - y_hat_a) / (b - a) - y_hat_x_a)
+            elif bc_type_a == 'neumann' and bc_type_b == 'neumann':
+                y_hat_a = self.stack(a)[idx]
+                y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
+                y_hat_b = self.stack(b)[idx]
+                y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
+
+                C1 = (bc_value_a + bc_value_b - y_hat_x_a - y_hat_x_b) / 2
+                C2 = (bc_value_b - bc_value_a + y_hat_x_a - y_hat_x_b) / (2 * (b - a))
+                y_bar[:, idx] = torch.squeeze(C1 * x) + C2 * torch.squeeze(x - a) * torch.squeeze(x - b) + y_hat[:, idx]
 
         return y_bar
-
-
 
     def forward(self, x):
         if self.bar_approach:
@@ -175,11 +179,6 @@ class CustomLoss(nn.Module):
             y_xx[:, i:i+1] = torch.autograd.grad(y_x[:, i].sum(), x, create_graph=True, allow_unused=True)[0]
 
         # Compute the ODE residuals and their mean squared error
-        ode_loss = torch.mean((self.bvp.eval_ode(x, y, y_x, y_xx) ** 2).sum(dim=1))
-
-
-
-        # Compute the ODE residuals and their mean squared error
         ode_loss = torch.mean(self.bvp.eval_ode(x, y, y_x, y_xx) ** 2)
 
         if self.bar_approach:
@@ -188,10 +187,19 @@ class CustomLoss(nn.Module):
             # Calculate boundary condition losses for each equation
             bc_loss = 0
             for i in range(num_equations):
-                # Recall bcs are indexed by [eqn no.][a or b][type or value]
-                y_a, y_b = self.bvp.bcs[i][0][1], self.bvp.bcs[i][1][1]
-                bc_loss += self.gamma * ((y[0, i] - y_a) ** 2 + (y[-1, i] - y_b) ** 2)
-            return ode_loss + bc_loss
+                for j in range(2):
+                    if self.bvp.bcs[i][j][0] == 'dirichlet':
+                        y_val = self.bvp.bcs[i][j][1]
+                        bc_loss += (y[0 if j == 0 else -1, i] - y_val) ** 2
+                    elif self.bvp.bcs[i][j][0] == 'neumann':
+                        y_val = self.bvp.bcs[i][j][1]
+                        bc_loss += (y_x[0 if j == 0 else -1, i] - y_val) ** 2
+                    elif self.bvp.bcs[i][j][0] == 'robin':
+                        alpha = self.bvp.bcs[i][j][1] # WE HAVE AN EXTRA ENTRY FOR THESE
+                        y_val = self.bvp.bcs[i][j][2] 
+                        # NOTICE the assumed form of storage for Robin condition (see Obsidian notes for more details)
+                        bc_loss += (y[0 if j == 0 else -1, i] + alpha * y_x[0 if j == 0 else -1, i] - y_val) ** 2
+            return ode_loss + self.gamma * bc_loss
     
 def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
     loss_values = []  # List to store loss values
@@ -271,7 +279,6 @@ def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     plt.tight_layout()
     plt.show()
 
-
 def plot_ode_residuals(model, bvp, x_train_tensor):
     # Convert the training tensor to numpy for x-axis plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
@@ -309,7 +316,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 11
+BVP_NO = 4
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -370,15 +377,22 @@ elif BVP_NO == 3:
     no_epochs = 20000
     learning_rate = 0.001
 elif BVP_NO == 4:
-    alphas = (1, 0, 1)
-    ns = (1, 0, 1)
-    domain_ends = (0, 3 * np.pi / 2)
-    bcs = (0, 1)
-    g_func = lambda x: 0
-    exact_sol = lambda x: - np.sin(x)
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,0]) + torch.squeeze(x) - y[:,0]
+    
+    # Each function in this list should return a 1D tensor (length = number of points in x)
+    ODE_funcs = [eqn1]
 
-    no_epochs = 5000
-    learning_rate = 0.002
+    domain_ends = (0, 1)
+    bcs = (
+        (('neumann', 1), ('neumann', -2)),
+    )
+
+    def exact_sol(x):
+        return np.array([-(3 * np.exp(1)/(np.exp(2) - 1))*np.exp(x) - (3 * np.exp(1)/(np.exp(2) - 1))*np.exp(-x) + x])
+    
+    no_epochs = 500
+    learning_rate = 0.02
 elif BVP_NO == 5:
     # BVP proposed by Kathryn for y_bar approach
     # ODE: -y'' + y^2 = g(x)
@@ -522,7 +536,7 @@ elif BVP_NO == 2:
 elif BVP_NO == 3:
     loss_class = CustomLoss(bvp=my_bvp, gamma=0.1, bar_approach=BAR_APPROACH)
 elif BVP_NO == 4:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.0, bar_approach=BAR_APPROACH)
+    loss_class = CustomLoss(bvp=my_bvp, gamma=8, bar_approach=BAR_APPROACH)
 elif BVP_NO == 5:
     loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 elif BVP_NO == 6:
@@ -536,16 +550,15 @@ elif BVP_NO == 9:
 elif BVP_NO == 10:
     loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 elif BVP_NO == 11:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=5, bar_approach=BAR_APPROACH)
+    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 
 
 # TRAINING POINTS
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
-x_train = torch.tensor(training_points).reshape(len(training_points), 1)
-x_train = x_train.to(torch.float32).requires_grad_(True)
+x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 8
+ANN_width = 5
 ANN_depth = 2
 
 output_features = my_bvp.dim
