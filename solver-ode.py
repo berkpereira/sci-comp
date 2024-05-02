@@ -195,11 +195,12 @@ class CustomLoss(nn.Module):
         y_x = torch.zeros_like(y)
         y_xx = torch.zeros_like(y)
 
+        # y_x = torch.autograd.grad([y[:,i] for i in range(num_equations)], x, [torch.ones_like(y[:,i]) for i in range(num_equations)], create_graph=True, allow_unused=True)[0]
         # Calculate derivatives individually for each equation to maintain correct shape
         for i in range(num_equations):
             # We need to keep y[:, i:i+1] to keep dimensionality for grad
-            y_x[:, i:i+1] = torch.autograd.grad(y[:, i].sum(), x, create_graph=True, allow_unused=True)[0]
-            y_xx[:, i:i+1] = torch.autograd.grad(y_x[:, i].sum(), x, create_graph=True, allow_unused=True)[0]
+            y_x[:, i:i+1] = torch.autograd.grad(y[:, i], x, torch.ones_like(y[:,i]), create_graph=True, allow_unused=True)[0]
+            y_xx[:, i:i+1] = torch.autograd.grad(y_x[:, i], x, torch.ones_like(y_x[:,i]), create_graph=True, allow_unused=True)[0]
 
         # Compute the ODE residuals and their mean squared error
         ode_loss = torch.mean(self.bvp.eval_ode(x, y, y_x, y_xx) ** 2)
@@ -339,7 +340,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 11
+BVP_NO = 10
 BAR_APPROACH = True
 
 if BVP_NO == 0:
