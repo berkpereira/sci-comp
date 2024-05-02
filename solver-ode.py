@@ -181,7 +181,7 @@ class NeuralNetwork(nn.Module):
             return self.stack(x)
     
 class CustomLoss(nn.Module):
-    def __init__(self, bvp, gamma, bar_approach=False):
+    def __init__(self, bvp, gamma=10, bar_approach=False):
         super().__init__()
         self.bvp = bvp
         self.gamma = gamma
@@ -340,8 +340,8 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 9
-BAR_APPROACH = True
+BVP_NO = 12
+BAR_APPROACH = False
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -568,8 +568,18 @@ elif BVP_NO == 12:
     
     exact_sol = lambda x: np.array([np.exp(x/10) * (-3 * np.cos(x) - 0.7 * np.sin(x))]) # UNIQUE solution
     
-    no_epochs = 500
-    learning_rate = 0.002
+    # LBFGS WORKS WELL!
+    # GOING FROM 50 TO 150 TRAINING POINTS MAKES MASSIVE DIFFERENCE IN SOLUTION QUALITY IN BAR APPROACH
+    no_epochs = 1500
+    learning_rate = 0.004
+
+    # COMMENTS ON THIS ONE:
+    # GOOD FIT USING GAMMA APPROACH, GAMMA = 10,
+    # LBFGS, 150 POINTS, 1500 EPOCHS, LEARNING RATE 0.004.
+    # AS GENERAL ISSUE WITH GAMMA, SEEMS TO BE A PROBLEM OF: IF BOUNDARIES ARE A BIT OFF,
+    # WHOLE FIT CAN LOOK OFF EVEN WITH VERY LOW LOSS VALUES (PROPAGATION OF THE WRONGNESS WHICH THE ODE CANNOT "UNDO").
+
+
 # Define BVP (routine)
 my_bvp = BVP(
     ODE_funcs=ODE_funcs,
@@ -605,7 +615,7 @@ elif BVP_NO == 12:
     loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
+training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 150)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
@@ -618,7 +628,7 @@ input_features = 1
 model = NeuralNetwork(my_bvp, input_features, output_features, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
 
 # OPTIMISER
-optimiser = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+optimiser = torch.optim.LBFGS(params=model.parameters(), lr=learning_rate)
 
 # Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)
