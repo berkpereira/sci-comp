@@ -143,7 +143,32 @@ class NeuralNetwork(nn.Module):
 
                 C1 = (bc_value_a + bc_value_b - y_hat_x_a - y_hat_x_b) / 2
                 C2 = (bc_value_b - bc_value_a + y_hat_x_a - y_hat_x_b) / (2 * (b - a))
+                
                 y_bar[:, idx] = torch.squeeze(C1 * x) + C2 * torch.squeeze(x - a) * torch.squeeze(x - b) + y_hat[:, idx]
+            elif bc_type_a == 'robin' and bc_type_b == 'neumann':
+                # READJUST for Robin conditions, which have slightly different storage structure
+                alpha, bc_value_a = bcs[idx][0][1:]
+
+                y_hat_a = self.stack(a)[idx]
+                y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
+                y_hat_b = self.stack(b)[idx]
+                y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
+
+                C = - y_hat_a + bc_value_b - y_hat_x_b - alpha * (y_hat_x_a + bc_value_b - y_hat_x_b) + bc_value_a
+                
+                y_bar[:, idx] = y_hat[:, idx] + C + (torch.squeeze(x) - a - 1) * (bc_value_b - y_hat_x_b)
+            elif bc_type_a == 'neumann' and bc_type_b == 'robin':
+                # READJUST for Robin conditions, which have slightly different storage structure
+                alpha, bc_value_a = bcs[idx][1][1:]
+
+                y_hat_a = self.stack(a)[idx]
+                y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
+                y_hat_b = self.stack(b)[idx]
+                y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
+
+                C = - y_hat_b + bc_value_a - y_hat_x_a - alpha * (y_hat_x_b + bc_value_a - y_hat_x_a) + bc_value_b
+                
+                y_bar[:, idx] = y_hat[:, idx] + C + (torch.squeeze(x) - b - 1) * (bc_value_a - y_hat_x_a)
 
         return y_bar
 
@@ -314,7 +339,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 0
+BVP_NO = 11
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -566,8 +591,8 @@ training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 50
-ANN_depth = 1
+ANN_width = 5
+ANN_depth = 2
 
 output_features = my_bvp.dim
 input_features = 1
@@ -582,7 +607,5 @@ loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epoc
 
 # PLOTTING
 plot_predictions(model, x_train, exact_sol_func=exact_sol)
-
 plot_loss_vs_epoch(loss_values)
-
 plot_ode_residuals(model, my_bvp, x_train)
