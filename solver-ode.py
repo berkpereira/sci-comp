@@ -51,7 +51,7 @@ class BVP:
             y_xx (torch.Tensor): Tensor of shape (num_points, num_funcs) of second derivatives at x.
         
         Returns:
-            torch.Tensor: A tensor representing the residuals for the system of ODEs.
+            torch.Tensor: A 2D tensor representing the residuals for the system of ODEs.
         """
         residuals_temp = torch.zeros_like(y)
         
@@ -101,17 +101,17 @@ class NeuralNetwork(nn.Module):
 
         # Note: For an n-system, bcs should be an n-tuple, where each element is a tuple ((bc_type_a, bc_value_a), (bc_type_b, bc_value_b))
         for idx in range(self.bvp.dim):
-            bc_type_a, bc_value_a = bcs[idx][0]
-            bc_type_b, bc_value_b = bcs[idx][1]
+            bc_type_a, bc_value_a = bcs[idx][0][0:2]
+            bc_type_b, bc_value_b = bcs[idx][1][0:2]
 
-            if bc_type_a == 'dirichlet' and bc_type_b == 'dirichlet':
+            if bc_type_a == 'd' and bc_type_b == 'd':
                 # 1st scaling option (seems to work well)
                 # y_bar = (x - a) * (b - x) * y_hat + (x - a)/(b - a) * y_b + (b - x) / (b - a) * y_a
                 y_bar[:, idx] = torch.squeeze((x - a) * (b - x)) * y_hat[:, idx] + torch.squeeze((x - a) / (b - a) * bc_value_b) + torch.squeeze((b - x) / (b - a) * bc_value_a)
                 
                 # 2nd scaling option (seems to work worse)
                 # y_bar = y_hat + (b - x)*(y_a - y_hat[0])/(b - a) + (x - a)*(y_b - y_hat[-1])/(b - a)
-            elif bc_type_a == 'dirichlet' and bc_type_b == 'neumann':
+            elif bc_type_a == 'd' and bc_type_b == 'n':
                 # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
                 # y_bar[:, idx] = y_b * x + y_a - a * y_b + (x - a) * (y_hat[:, idx] - y_hat_b - y_hat_x_b) / (b - a)
                 
@@ -122,7 +122,7 @@ class NeuralNetwork(nn.Module):
                 y_hat_x_b = torch.autograd.grad(y_hat_b, b, torch.ones_like(y_hat_b), create_graph=True)[0]
                 # MY FIX to Kathryn proposal
                 y_bar[:, idx] = torch.squeeze(bc_value_b * x) + bc_value_a - a * bc_value_b + torch.squeeze(x - a) * ((y_hat[:, idx] - y_hat_b) / (b - a) - y_hat_x_b)
-            elif bc_type_a == 'neumann' and bc_type_b == 'dirichlet':
+            elif bc_type_a == 'n' and bc_type_b == 'd':
                 # 1st scaling approach (Kathryn-proposed) (I think I copied down wrong, does not enforce BC)
                 # y_bar = y_a * x + y_b - b * y_a + (x - b) * (y_hat - y_hat_a - y_hat_x_a) / (b - a)
 
@@ -135,7 +135,7 @@ class NeuralNetwork(nn.Module):
                 y_hat_a = self.stack(a)[idx]
                 y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
                 y_bar[:, idx] = torch.squeeze(bc_value_a * x) + bc_value_b - b * bc_value_a + torch.squeeze(b - x) * ((y_hat[:, idx] - y_hat_a) / (b - a) - y_hat_x_a)
-            elif bc_type_a == 'neumann' and bc_type_b == 'neumann':
+            elif bc_type_a == 'n' and bc_type_b == 'n':
                 y_hat_a = self.stack(a)[idx]
                 y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
                 y_hat_b = self.stack(b)[idx]
@@ -145,7 +145,7 @@ class NeuralNetwork(nn.Module):
                 C2 = (bc_value_b - bc_value_a + y_hat_x_a - y_hat_x_b) / (2 * (b - a))
                 
                 y_bar[:, idx] = torch.squeeze(C1 * x) + C2 * torch.squeeze(x - a) * torch.squeeze(x - b) + y_hat[:, idx]
-            elif bc_type_a == 'robin' and bc_type_b == 'neumann':
+            elif bc_type_a == 'r' and bc_type_b == 'n':
                 # READJUST for Robin conditions, which have slightly different storage structure
                 alpha, bc_value_a = bcs[idx][0][1:]
 
@@ -157,9 +157,9 @@ class NeuralNetwork(nn.Module):
                 C = - y_hat_a + bc_value_b - y_hat_x_b - alpha * (y_hat_x_a + bc_value_b - y_hat_x_b) + bc_value_a
                 
                 y_bar[:, idx] = y_hat[:, idx] + C + (torch.squeeze(x) - a - 1) * (bc_value_b - y_hat_x_b)
-            elif bc_type_a == 'neumann' and bc_type_b == 'robin':
+            elif bc_type_a == 'n' and bc_type_b == 'r':
                 # READJUST for Robin conditions, which have slightly different storage structure
-                alpha, bc_value_a = bcs[idx][1][1:]
+                alpha, bc_value_b = bcs[idx][1][1:]
 
                 y_hat_a = self.stack(a)[idx]
                 y_hat_x_a = torch.autograd.grad(y_hat_a, a, torch.ones_like(y_hat_a), create_graph=True)[0]
@@ -212,13 +212,13 @@ class CustomLoss(nn.Module):
             bc_loss = 0
             for i in range(num_equations):
                 for j in range(2):
-                    if self.bvp.bcs[i][j][0] == 'dirichlet':
+                    if self.bvp.bcs[i][j][0] == 'd':
                         y_val = self.bvp.bcs[i][j][1]
                         bc_loss += (y[0 if j == 0 else -1, i] - y_val) ** 2
-                    elif self.bvp.bcs[i][j][0] == 'neumann':
+                    elif self.bvp.bcs[i][j][0] == 'n':
                         y_val = self.bvp.bcs[i][j][1]
                         bc_loss += (y_x[0 if j == 0 else -1, i] - y_val) ** 2
-                    elif self.bvp.bcs[i][j][0] == 'robin':
+                    elif self.bvp.bcs[i][j][0] == 'r':
                         alpha = self.bvp.bcs[i][j][1] # WE HAVE AN EXTRA ENTRY FOR THESE
                         y_val = self.bvp.bcs[i][j][2] 
                         # NOTICE the assumed form of storage for Robin condition (see Obsidian notes for more details)
@@ -340,7 +340,7 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 10
+BVP_NO = 9
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -360,7 +360,7 @@ if BVP_NO == 0:
 
     domain_ends = (0, 1)
     bcs = (
-        (('dirichlet', 1), ('dirichlet', 1)),
+        (('d', 1), ('d', 1)),
     )
     exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
@@ -386,13 +386,13 @@ elif BVP_NO == 2:
 
     domain_ends = (0, 9 * np.pi / 16)
     bcs = (
-        (('dirichlet', 1),('dirichlet', 0)),
+        (('d', 1),('d', 0)),
     )
     
     exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
     
     no_epochs = 30000
-    learning_rate = 0.003
+    learning_rate = 0.0025
 elif BVP_NO == 3:
     alphas = (1, 0, 0)
     ns = (1, 0, 0)
@@ -413,7 +413,7 @@ elif BVP_NO == 4:
 
     domain_ends = (0, 1)
     bcs = (
-        (('neumann', 1), ('neumann', -2)),
+        (('n', 1), ('n', -2)),
     )
 
     def exact_sol(x):
@@ -442,7 +442,7 @@ elif BVP_NO == 6:
     # y(0) = y(1) = 1
     domain_ends = (0, 1)
     bcs = (
-        (('dirichlet', 1), ('neumann', -1)),
+        (('d', 1), ('n', -1)),
     )
 
     def eqn1(x, y, y_x, y_xx):
@@ -462,8 +462,8 @@ elif BVP_NO == 7:
     alphas = (1, 0, -1)
     ns = (2, 1, 1)
     domain_ends = (0, 1)
-    bcs = {'a':('neumann', 1),
-            'b':('dirichlet', 1)}
+    bcs = {'a':('n', 1),
+            'b':('d', 1)}
 
     g_func = lambda x: 3 + 2*x - x**2 - 2*x**3 + x**4
     exact_sol = lambda x: 1 + x * (1 - x)
@@ -475,7 +475,7 @@ elif BVP_NO == 8:
     # neumann + dirichlet conditions
     domain_ends = (0, 2 * np.pi)
     bcs = (
-        (('neumann', 0), ('dirichlet', 1)),
+        (('n', 0), ('d', 1)),
     )
 
     def eqn1(x, y, y_x, y_xx):
@@ -497,7 +497,7 @@ elif BVP_NO == 9:
 
     domain_ends = (0, 3 * np.pi / 8)
     bcs = (
-        (('dirichlet', 1),('neumann', 0)),
+        (('d', 1), ('n', 0)),
     )
     
     exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
@@ -509,8 +509,8 @@ elif BVP_NO == 10:
     # neumann + dirichlet conditions
     domain_ends = (0, 1)
     bcs = (
-        (('dirichlet', 1), ('dirichlet', 1)),
-        (('dirichlet', 0), ('dirichlet', 0)),
+        (('d', 1), ('d', 1)),
+        (('d', 0), ('d', 0)),
     )
 
     def eqn1(x, y, y_x, y_xx):
@@ -532,8 +532,8 @@ elif BVP_NO == 11:
     # proof of concept for systems solver. UNCOUPLED equations
     domain_ends = (0, 1)
     bcs = (
-        (('dirichlet', 1), ('dirichlet', 1)),
-        (('dirichlet', 0), ('dirichlet', 0)),
+        (('d', 1), ('d', 1)),
+        (('d', 0), ('d', 0)),
     )
 
     # simple parabolic solution
@@ -553,7 +553,23 @@ elif BVP_NO == 11:
 
     no_epochs = 10000
     learning_rate = 0.003
+elif BVP_NO == 12:
+    # TRYING OUT ROBIN BCs
+    # Right domain end is about x = 2.55
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,0]) - torch.squeeze((1/5) * torch.squeeze(y_x[:,0])) + 1.01 * torch.squeeze(y)
+    
+    ODE_funcs = [eqn1]
 
+    domain_ends = (0, 3 * np.pi)
+    bcs = (
+        (('n', -1),('r', -3, 0)),
+    )
+    
+    exact_sol = lambda x: np.array([np.exp(x/10) * (-3 * np.cos(x) - 0.7 * np.sin(x))]) # UNIQUE solution
+    
+    no_epochs = 500
+    learning_rate = 0.002
 # Define BVP (routine)
 my_bvp = BVP(
     ODE_funcs=ODE_funcs,
@@ -585,15 +601,16 @@ elif BVP_NO == 10:
     loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 elif BVP_NO == 11:
     loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
-
+elif BVP_NO == 12:
+    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 50)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
-ANN_width = 5
-ANN_depth = 2
+ANN_width = 50
+ANN_depth = 1
 
 output_features = my_bvp.dim
 input_features = 1
