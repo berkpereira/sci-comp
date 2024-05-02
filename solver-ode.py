@@ -271,13 +271,18 @@ def plot_loss_vs_epoch(loss_values):
     plt.legend()
     plt.show()
 
-def plot_predictions(model, x_train_tensor, exact_sol_func=None):
+def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True, exact_sol_func=None):
     # Convert the training tensor to numpy for plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
+    x_eval_numpy  = x_eval_tensor.detach().numpy().flatten()
     
     # Predictions from the neural network
     # We DO need gradients sometimes for evaluation (bar approach with Neumann conditions, etc.)
-    y_pred_tensor = model(x_train_tensor)
+    if eval_nn_at_train:
+        y_pred_tensor = model(x_train_tensor)
+    else:
+        y_pred_tensor = model(x_eval_tensor)
+    
     y_pred_numpy = y_pred_tensor.detach().numpy()
     
     num_equations = y_pred_numpy.shape[1]
@@ -290,10 +295,13 @@ def plot_predictions(model, x_train_tensor, exact_sol_func=None):
     
     # Plot predictions for each equation
     for i in range(num_equations):
-        axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
+        if eval_nn_at_train:
+            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
+        else:
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
         if exact_sol_func is not None:
-            y_exact_numpy = exact_sol_func(x_train_numpy)[i]
-            axes[i].plot(x_train_numpy, y_exact_numpy, label=f'Analytical Solution (eq {i+1})', color='b', linestyle='-')
+            y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
+            axes[i].plot(x_eval_numpy, y_exact_numpy, label=f'Analytical Solution (eq {i+1})', color='b', linestyle='-')
         
         axes[i].set_xlabel('x')
         axes[i].set_ylabel('y')
@@ -340,8 +348,8 @@ ENTERING RELEVANT PARAMETERS
 
 """
 
-BVP_NO = 12
-BAR_APPROACH = False
+BVP_NO = 1
+BAR_APPROACH = True
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -368,15 +376,22 @@ if BVP_NO == 0:
     learning_rate = 0.004
 elif BVP_NO == 1:
     # BVP with boundary layer solution
-    g_func=lambda x: 1
-    alphas = (0, 1, -0.02)
-    ns = (1, 1, 1)
+    eps = 0.015
+
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(eps * torch.squeeze(y_xx[:,0]) - torch.squeeze(y_x[:,0]) + 1)
+    
+    ODE_funcs = [eqn1]
+    
     domain_ends = (0, 1)
-    bcs = (0, 0)
-    exact_sol = None
+
+    bcs = (
+        (('d', 0), ('d', 0)),
+    )
+    exact_sol = lambda x: np.array([x + (np.exp(- (1 - x) / eps) - np.exp(- 1 / eps)) / (np.exp(-1 / eps) - 1)])
     
     no_epochs = 10000
-    learning_rate = 0.008
+    learning_rate = 0.06
 elif BVP_NO == 2:
     # Right domain end is about x = 2.55
     def eqn1(x, y, y_x, y_xx):
@@ -574,8 +589,8 @@ elif BVP_NO == 12:
     learning_rate = 0.004
 
     # COMMENTS ON THIS ONE:
-    # GOOD FIT USING GAMMA APPROACH, GAMMA = 10,
-    # LBFGS, 150 POINTS, 1500 EPOCHS, LEARNING RATE 0.004.
+    # GOOD FIT USING WIDTH 50, DEPTH 1, GAMMA APPROACH, GAMMA = 10,
+    # LBFGS, 150 POINTS, 1500 EPOCHS, LEARNING RATE 0.004. OFTEN SEEMS STUCK ON A BAD LOCAL MINIMUM, BUT THIS COMBO GETS OVER THAT.
     # AS GENERAL ISSUE WITH GAMMA, SEEMS TO BE A PROBLEM OF: IF BOUNDARIES ARE A BIT OFF,
     # WHOLE FIT CAN LOOK OFF EVEN WITH VERY LOW LOSS VALUES (PROPAGATION OF THE WRONGNESS WHICH THE ODE CANNOT "UNDO").
 
@@ -615,7 +630,8 @@ elif BVP_NO == 12:
     loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 150)
+NO_TRAINING_POINTS = 50
+training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], NO_TRAINING_POINTS)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
@@ -628,12 +644,14 @@ input_features = 1
 model = NeuralNetwork(my_bvp, input_features, output_features, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
 
 # OPTIMISER
-optimiser = torch.optim.LBFGS(params=model.parameters(), lr=learning_rate)
+optimiser = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
 
 # Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)
 
 # PLOTTING
-plot_predictions(model, x_train, exact_sol_func=exact_sol)
+eval_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 200)
+x_eval = torch.tensor(eval_points).reshape(len(eval_points), 1).to(torch.float32)
+plot_predictions(model, x_train, x_eval, eval_nn_at_train=True, exact_sol_func=exact_sol)
 plot_loss_vs_epoch(loss_values)
 plot_ode_residuals(model, my_bvp, x_train)
