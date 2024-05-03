@@ -103,10 +103,10 @@ class CustomLoss(nn.Module):
             # Boundary conditions loss (Dirichlet)
             bc_loss = 0
             # Assign boundary values using the callable attributes from self.bvp.bcs
-            east_mask =  (xy[:, 0] == 1)  # y = 1
-            north_mask = (xy[:, 1] == 1)  # x = 1
-            west_mask =  (xy[:, 0] == 0)  # y = 0
-            south_mask = (xy[:, 1] == 0)  # x = 0
+            east_mask =  (xy[:, 0] == 1)  # x = 1
+            north_mask = (xy[:, 1] == 1)  # y = 1
+            west_mask =  (xy[:, 0] == 0)  # x = 0
+            south_mask = (xy[:, 1] == 0)  # y = 0
 
             # Compute boundary errors
             bc_loss += torch.mean((u[east_mask]  - self.bvp.bcs['east'](xy[east_mask, 1])).pow(2))
@@ -499,7 +499,7 @@ depth = 1
 model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
-optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
+optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Loss class instance
 loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
