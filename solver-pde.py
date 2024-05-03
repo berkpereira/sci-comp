@@ -37,7 +37,11 @@ class BVP2D:
         self.g_func = g_func
 
     def eval_pde(self, xy, u, u_x, u_y, u_xx, u_yy):
-        return self.PDE_func(xy, u, u_x, u_y, u_xx, u_yy)
+        output = self.PDE_func(xy, u, u_x, u_y, u_xx, u_yy)
+        if output.dim() == 1:
+            return output
+        else:
+            raise Exception('Residual tensor should be one-dimensional!')
     
 class NeuralNetwork2D(nn.Module):
     def __init__(self, bvp, input_features=2, output_features=1, hidden_units=50, depth=1, bar_approach=False):
@@ -97,16 +101,16 @@ class CustomLoss(nn.Module):
             # Boundary conditions loss (Dirichlet)
             bc_loss = 0
             # Assign boundary values using the callable attributes from self.bvp.bcs
-            east_mask = (xy[:, 1] == 1)  # y = 1
-            north_mask = (xy[:, 0] == 1)  # x = 1
-            west_mask = (xy[:, 1] == 0)  # y = 0
-            south_mask = (xy[:, 0] == 0)  # x = 0
+            east_mask =  (xy[:, 0] == 1)  # y = 1
+            north_mask = (xy[:, 1] == 1)  # x = 1
+            west_mask =  (xy[:, 0] == 0)  # y = 0
+            south_mask = (xy[:, 1] == 0)  # x = 0
 
             # Compute boundary errors
-            bc_loss += torch.mean((u[east_mask] - self.bvp.bcs['east'](xy[east_mask, 0])).pow(2))
-            bc_loss += torch.mean((u[north_mask] - self.bvp.bcs['north'](xy[north_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[west_mask] - self.bvp.bcs['west'](xy[west_mask, 0])).pow(2))
-            bc_loss += torch.mean((u[south_mask] - self.bvp.bcs['south'](xy[south_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[east_mask]  - self.bvp.bcs['east'](xy[east_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[north_mask] - self.bvp.bcs['north'](xy[north_mask, 0])).pow(2))
+            bc_loss += torch.mean((u[west_mask]  - self.bvp.bcs['west'](xy[west_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[south_mask] - self.bvp.bcs['south'](xy[south_mask, 0])).pow(2))
 
             # Return total loss
             return pde_loss + self.gamma * bc_loss
@@ -246,11 +250,11 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 3
+BVP_NO = 2
 BAR_APPROACH = True
 
 if BVP_NO == 0:
-    # Laplace's equation
+    # Laplace's equation, TRIVIAL solution
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
         return u_xx + u_yy
 
@@ -276,18 +280,20 @@ if BVP_NO == 0:
 
     no_epochs = 500
     learning_rate = 0.05
+
+    gamma=10
 if BVP_NO == 1:
     # Laplace's equation
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
-        return u_xx + u_yy + 2 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xy[:,0])) * torch.sin(np.pi * torch.squeeze(xy[:,1]))
+        return torch.squeeze(u_xx + u_yy) + (2 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xy[:,0])) * torch.sin(np.pi * torch.squeeze(xy[:,1])))
 
-    def boundary_east(x):
+    def boundary_east(y):
         return 0.0
-    def boundary_west(x):
+    def boundary_west(y):
         return 0.0
-    def boundary_north(y):
+    def boundary_north(x):
         return 0.0
-    def boundary_south(y):
+    def boundary_south(x):
         return 0.0 
 
     # Domain bounds
@@ -300,15 +306,15 @@ if BVP_NO == 1:
     def exact_sol(xy):
         return np.sin(np.pi * xy[:,0]) * np.sin(np.pi * xy[:,1])
 
-    no_epochs = 2000
-    learning_rate = 0.03
+    no_epochs = 3000
+    learning_rate = 0.1
 
     gamma = 100
 if BVP_NO == 2:
     # Laplace's equation
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
         x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
-        return u_xx + u_yy - 2 * x * (y - 1) * (y - 2*x + x*y + 2) * torch.exp(x - y)
+        return torch.squeeze(u_xx + u_yy) - torch.squeeze(2 * x * (y - 1) * (y - 2*x + x*y + 2) * torch.exp(x - y))
 
     def boundary_east(y):
         return 0.0
@@ -331,7 +337,7 @@ if BVP_NO == 2:
         return np.exp(x - y) * x * (1 - x) * y * (1 - y)
 
     no_epochs = 1500
-    learning_rate = 1
+    learning_rate = 0.1
 
     gamma = 10
 if BVP_NO == 3:
@@ -365,7 +371,34 @@ if BVP_NO == 3:
     learning_rate = 0.1
 
     gamma = 20
+if BVP_NO == 4:
+    # Laplace's equation
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
+        return u_xx + u_yy
 
+    def boundary_east(y):
+        return 1 - y**2
+    def boundary_west(y):
+        return - y**2
+    def boundary_north(x):
+        return x**2 - 1
+    def boundary_south(x):
+        return x**2
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        Exception('not in use')
+
+    def exact_sol(xy):
+        return xy[:,0] ** 2 - xy[:,1] ** 2
+
+    no_epochs = 5000
+    learning_rate = 0.03
+
+    gamma = 100
 
 # Boundary conditions dictionary
 bcs = {
@@ -392,11 +425,11 @@ model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=h
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Loss class instance
-loss_class = CustomLoss(bvp, gamma=gamma)
+loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-# xy_train = uniform_mesh(domain_bounds, 50, 50)
-xy_train = random_mesh(domain_bounds, 1000, 50, 50)
+xy_train = uniform_mesh(domain_bounds, 30, 30)
+# xy_train = random_mesh(domain_bounds, 1000, 50, 50)
 xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
