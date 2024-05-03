@@ -15,7 +15,7 @@ plt.rcParams.update({
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 8)
 
-torch.manual_seed(42)
+torch.manual_seed(4)
 
 ####################################################################################################
 ####################################################################################################
@@ -140,7 +140,7 @@ def train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs):
         # Store the loss value for this epoch
         loss_values.append(loss.item())
 
-        if epoch % 100 == 0:
+        if epoch % 10 == 0:
             print(f"Epoch: {epoch} | Loss: {loss.item():e}")
 
     return loss_values  # Return the list of loss values
@@ -246,11 +246,12 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 0
+BVP_NO = 3
 BAR_APPROACH = True
 
 if BVP_NO == 0:
-    def laplace_pde(xy, u, u_x, u_y, u_xx, u_yy):
+    # Laplace's equation
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
         return u_xx + u_yy
 
     def boundary_east(x):
@@ -275,6 +276,95 @@ if BVP_NO == 0:
 
     no_epochs = 500
     learning_rate = 0.05
+if BVP_NO == 1:
+    # Laplace's equation
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
+        return u_xx + u_yy + 2 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xy[:,0])) * torch.sin(np.pi * torch.squeeze(xy[:,1]))
+
+    def boundary_east(x):
+        return 0.0
+    def boundary_west(x):
+        return 0.0
+    def boundary_north(y):
+        return 0.0
+    def boundary_south(y):
+        return 0.0 
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        return torch.zeros(xy.size(0))
+
+    def exact_sol(xy):
+        return np.sin(np.pi * xy[:,0]) * np.sin(np.pi * xy[:,1])
+
+    no_epochs = 2000
+    learning_rate = 0.03
+
+    gamma = 100
+if BVP_NO == 2:
+    # Laplace's equation
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
+        x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
+        return u_xx + u_yy - 2 * x * (y - 1) * (y - 2*x + x*y + 2) * torch.exp(x - y)
+
+    def boundary_east(y):
+        return 0.0
+    def boundary_west(y):
+        return 0.0
+    def boundary_north(x):
+        return 0.0
+    def boundary_south(x):
+        return 0.0 
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        return torch.zeros(xy.size(0))
+
+    def exact_sol(xy):
+        x, y = xy[:,0], xy[:,1]
+        return np.exp(x - y) * x * (1 - x) * y * (1 - y)
+
+    no_epochs = 1500
+    learning_rate = 1
+
+    gamma = 10
+if BVP_NO == 3:
+    # Laplace's equation, linear solution
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
+        x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
+        return u_xx + u_yy
+
+    def boundary_east(y):
+        return 1
+    def boundary_west(y):
+        return 0
+    def boundary_north(x):
+        return x
+    def boundary_south(x):
+        return x
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
+        return x
+
+    def exact_sol(xy):
+        x, y = xy[:,0], xy[:,1]
+        return x
+
+    no_epochs = 1000
+    learning_rate = 0.1
+
+    gamma = 20
 
 
 # Boundary conditions dictionary
@@ -286,13 +376,14 @@ bcs = {
 }
 
 # BVP instance
-bvp = BVP2D(PDE_func=laplace_pde, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
+bvp = BVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
 
 # Neural network parameters
 input_features = 2
 output_features = 1
+
 hidden_units = 50
-depth = 2
+depth = 1
 
 # Create the neural network
 model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
@@ -301,15 +392,16 @@ model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=h
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Loss class instance
-loss_class = CustomLoss(bvp)
+loss_class = CustomLoss(bvp, gamma=gamma)
 
 # GENERATE MESHES
-xy_train = uniform_mesh(domain_bounds, 50, 50)
+# xy_train = uniform_mesh(domain_bounds, 50, 50)
+xy_train = random_mesh(domain_bounds, 1000, 50, 50)
 xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs)
 
 # PLOTTING
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, plot_type='surface')
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, plot_type='contour')
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
+# plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
