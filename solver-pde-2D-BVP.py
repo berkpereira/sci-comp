@@ -17,6 +17,8 @@ FIGSIZE = (10, 8)
 
 torch.manual_seed(42)
 
+# WARNING: EVEN THOUGH THE CODE MAY SUGGEST OTHERWISE, THIS CURRENTLY ONLY WORKS FOR CUBES (0, 1)^3, NO OTHER CUBOIDS.
+# For other cuboids would require (minor) adjustments.
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
