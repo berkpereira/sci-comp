@@ -217,7 +217,39 @@ def plot_loss_vs_epoch(loss_values):
     plt.legend()
     plt.show()
 
-# (random mesh, FORCED to include BOUNDARY points!)
+def plot_pde_residuals(model, bvp, xy_train_tensor):
+    # Predictions from the neural network
+    u_pred = model(xy_train_tensor)
+
+    # Make sure predictions are detached and require gradients for further computation
+    u_pred.requires_grad_(True)
+
+    # Compute derivatives with respect to both dimensions
+    grad_outputs = torch.ones_like(u_pred)
+    grads = torch.autograd.grad(u_pred, xy_train_tensor, grad_outputs=grad_outputs, create_graph=True)[0]
+    u_x, u_y = grads[:, 0].view(-1, 1), grads[:, 1].view(-1, 1)
+    u_xx = torch.autograd.grad(u_x, xy_train_tensor, grad_outputs=grad_outputs, create_graph=True)[0][:, 0]
+    u_yy = torch.autograd.grad(u_y, xy_train_tensor, grad_outputs=grad_outputs, create_graph=True)[0][:, 1]
+
+    # Evaluate the PDE residuals
+    residuals = np.abs(bvp.eval_pde(xy_train_tensor, u_pred, u_x, u_y, u_xx, u_yy).detach().numpy())
+
+    # Reshape for plotting
+    num_points_per_dim = int(np.sqrt(xy_train_tensor.shape[0]))
+    x = xy_train_tensor[:, 0].view(num_points_per_dim, num_points_per_dim).detach().numpy()
+    y = xy_train_tensor[:, 1].view(num_points_per_dim, num_points_per_dim).detach().numpy()
+    residuals_reshaped = residuals.reshape(num_points_per_dim, num_points_per_dim)
+
+    # Plotting
+    plt.figure(figsize=(10, 8))
+    contour = plt.contourf(x, y, residuals_reshaped, cmap='viridis')
+    plt.colorbar(contour)
+    plt.title('PDE Residuals (abs) Across the Domain')
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.show()
+
+# MESH GENERATION
 def random_mesh(domain_bounds, num_interior_points, x_bound_points, y_bound_points):
     # Calculate the scaling and offset for the interior points
     x_range = domain_bounds['x'][1] - domain_bounds['x'][0]
@@ -449,3 +481,4 @@ loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs
 plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
 # plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
 plot_loss_vs_epoch(loss_values)
+plot_pde_residuals(model, bvp, xy_train)
