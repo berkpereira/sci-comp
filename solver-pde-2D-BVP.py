@@ -292,7 +292,7 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 1
+BVP_NO = 4
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -353,6 +353,40 @@ if BVP_NO == 1:
 
     gamma = 100
 if BVP_NO == 2:
+    # Laplace's equation, higher frequency!
+    # THIS ONE REALLY BENEFITS FROM HIGHER NUMBER OF POINTS (e.g., 50 per direction)
+
+    # GOOD SOLUTION OBTAINED:
+    # Use, e.g., bar approach = True, 50 points per direction (uniform), 50 wide, 1 deep,
+    # lr = 0.005, LBFGS optimiser, no_epochs = 500
+
+    def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
+        return torch.squeeze(u_xx + u_yy) + (2 * (4 * np.pi)**2 * torch.sin(4 * np.pi * torch.squeeze(xy[:,0])) * torch.sin(4 * np.pi * torch.squeeze(xy[:,1])))
+
+    def boundary_east(y):
+        return 0.0
+    def boundary_west(y):
+        return 0.0
+    def boundary_north(x):
+        return 0.0
+    def boundary_south(x):
+        return 0.0 
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        return torch.zeros(xy.size(0))
+
+    def exact_sol(xy):
+        return np.sin(4 * np.pi * xy[:,0]) * np.sin(4 * np.pi * xy[:,1])
+
+    no_epochs = 650
+    learning_rate = 0.007
+
+    gamma = 100
+if BVP_NO == 3:
     # Laplace's equation
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
         x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
@@ -382,11 +416,10 @@ if BVP_NO == 2:
     learning_rate = 0.1
 
     gamma = 10
-if BVP_NO == 3:
+if BVP_NO == 4:
     # Laplace's equation, linear solution
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
-        x, y = torch.squeeze(xy[:,0]), torch.squeeze(xy[:,1])
-        return u_xx + u_yy
+        return torch.squeeze(u_xx + u_yy)
 
     def boundary_east(y):
         return 1
@@ -409,11 +442,11 @@ if BVP_NO == 3:
         x, y = xy[:,0], xy[:,1]
         return x
 
-    no_epochs = 1000
+    no_epochs = 100
     learning_rate = 0.1
 
     gamma = 20
-if BVP_NO == 4:
+if BVP_NO == 5:
     # Laplace's equation
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
         return u_xx + u_yy
@@ -457,20 +490,20 @@ bvp = BVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_fu
 input_features = 2
 output_features = 1
 
-hidden_units = 5
-depth = 2
+hidden_units = 50
+depth = 1
 
 # Create the neural network
 model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
-optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
 
 # Loss class instance
 loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-xy_train = uniform_mesh(domain_bounds, 30, 30)
+xy_train = uniform_mesh(domain_bounds, 50, 50)
 # xy_train = random_mesh(domain_bounds, 1000, 50, 50)
 xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 
