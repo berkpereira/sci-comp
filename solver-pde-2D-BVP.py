@@ -15,7 +15,7 @@ plt.rcParams.update({
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 8)
 
-torch.manual_seed(4)
+torch.manual_seed(42)
 
 ####################################################################################################
 ####################################################################################################
@@ -250,7 +250,7 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 2
+BVP_NO = 1
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -306,8 +306,8 @@ if BVP_NO == 1:
     def exact_sol(xy):
         return np.sin(np.pi * xy[:,0]) * np.sin(np.pi * xy[:,1])
 
-    no_epochs = 3000
-    learning_rate = 0.1
+    no_epochs = 1500
+    learning_rate = 0.05
 
     gamma = 100
 if BVP_NO == 2:
@@ -336,7 +336,7 @@ if BVP_NO == 2:
         x, y = xy[:,0], xy[:,1]
         return np.exp(x - y) * x * (1 - x) * y * (1 - y)
 
-    no_epochs = 1500
+    no_epochs = 500
     learning_rate = 0.1
 
     gamma = 10
@@ -415,8 +415,8 @@ bvp = BVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_fu
 input_features = 2
 output_features = 1
 
-hidden_units = 50
-depth = 1
+hidden_units = 5
+depth = 2
 
 # Create the neural network
 model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
@@ -437,4 +437,4 @@ loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs
 
 # PLOTTING
 plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
-# plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
