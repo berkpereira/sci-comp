@@ -207,6 +207,16 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
     plt.tight_layout()
     plt.show()
 
+def plot_loss_vs_epoch(loss_values):
+    plt.figure(figsize=FIGSIZE)
+    plt.plot(loss_values, label='Training Loss', color='blue')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Loss vs. Epoch')
+    plt.yscale('log')  # Set the y-axis to logarithmic scale
+    plt.legend()
+    plt.show()
+
 # (random mesh, FORCED to include BOUNDARY points!)
 def random_mesh(domain_bounds, num_interior_points, x_bound_points, y_bound_points):
     # Calculate the scaling and offset for the interior points
@@ -437,4 +447,5 @@ loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs
 
 # PLOTTING
 plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
+# plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
+plot_loss_vs_epoch(loss_values)
