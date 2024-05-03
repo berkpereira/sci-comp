@@ -1,9 +1,8 @@
 import numpy as np
-#from plotly.offline import iplot
-#import plotly.graph_objs as go
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # Enable LaTeX rendering
 
@@ -35,6 +34,7 @@ class BVP2D:
         self.PDE_func = PDE_func
         self.domain_bounds = domain_bounds
         self.bcs = bcs
+        self.g_func = g_func
 
     def eval_pde(self, xy, u, u_x, u_y, u_xx, u_yy):
         return self.PDE_func(xy, u, u_x, u_y, u_xx, u_yy)
@@ -59,7 +59,7 @@ class NeuralNetwork2D(nn.Module):
         self.stack = nn.Sequential(*layers)
     
     def u_bar_scaling(self, xy, u_hat):
-        return xy[:,0] * (1 - xy[:,0]) * xy[:,1] * (1 - xy[:,1]) * u_hat + self.bvp.g_func
+        return xy[:,0] * (1 - xy[:,0]) * xy[:,1] * (1 - xy[:,1]) * torch.squeeze(u_hat) + self.bvp.g_func(xy)
 
     def forward(self, xy):
         u_hat = self.stack(xy)
@@ -145,59 +145,63 @@ def train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-####################################################################################################
-####################################################################################################
-####################################################################################################
+def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface'):
+    # Convert the evaluation tensor to numpy for plotting
+    xy_eval_numpy = xy_eval_tensor.detach().numpy()
+    
+    # Predictions from the neural network
+    if eval_nn_at_train:
+        u_pred_tensor = model(xy_train_tensor)
+        xy_plot = xy_train_tensor
+    else:
+        u_pred_tensor = model(xy_eval_tensor)
+        xy_plot = xy_eval_tensor
 
-BVP_NO = 0
-BAR_APPROACH = False
+    u_pred_numpy = u_pred_tensor.detach().numpy()
 
-if BVP_NO == 0:
-    def laplace_pde(xy, u, u_x, u_y, u_xx, u_yy):
-        return u_xx + u_yy
+    # Reshape for plotting
+    num_points_per_dim = int(np.sqrt(xy_plot.shape[0]))
+    x = xy_plot[:, 0].view(num_points_per_dim, num_points_per_dim).detach().numpy()
+    y = xy_plot[:, 1].view(num_points_per_dim, num_points_per_dim).detach().numpy()
+    u_pred_reshaped = u_pred_numpy.reshape(num_points_per_dim, num_points_per_dim)
 
-    def boundary_east(x):
-        return 0.0
-    def boundary_west(x):
-        return 0.0
-    def boundary_north(y):
-        return 0.0
-    def boundary_south(y):
-        return 0.0 
+    # Plotting
+    fig, axs = plt.subplots(1, 2, figsize=(18, 8), subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
+    
+    if plot_type == 'surface':
+        surf = axs[0].plot_surface(x, y, u_pred_reshaped, cmap='viridis', edgecolor='none')
+        axs[0].set_title('Neural Network Predictions')
+        axs[0].set_xlabel('x')
+        axs[0].set_ylabel('y')
+        axs[0].set_zlabel('u')
+        fig.colorbar(surf, ax=axs[0], shrink=0.5, aspect=5)
+    elif plot_type == 'contour':
+        contour = axs[0].contourf(x, y, u_pred_reshaped, cmap='viridis', levels=50)
+        axs[0].set_title('Neural Network Predictions')
+        axs[0].set_xlabel('x')
+        axs[0].set_ylabel('y')
+        fig.colorbar(contour, ax=axs[0], shrink=0.5, aspect=5)
 
-    # Domain bounds
-    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+    if exact_sol_func is not None:
+        u_exact_numpy = exact_sol_func(xy_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
+        if plot_type == 'surface':
+            surf = axs[1].plot_surface(x, y, u_exact_numpy, cmap='viridis', edgecolor='none')
+            axs[1].set_title('Exact Solution')
+            axs[1].set_xlabel('x')
+            axs[1].set_ylabel('y')
+            axs[1].set_zlabel('u')
+            fig.colorbar(surf, ax=axs[1], shrink=0.5, aspect=5)
+        elif plot_type == 'contour':
+            contour = axs[1].contourf(x, y, u_exact_numpy, cmap='viridis', levels=50)
+            axs[1].set_title('Exact Solution')
+            axs[1].set_xlabel('x')
+            axs[1].set_ylabel('y')
+            fig.colorbar(contour, ax=axs[1], shrink=0.5, aspect=5)
+    else:
+        axs[1].set_title('No exact solution provided')
 
-    no_epochs = 5000
-    learning_rate = 0.05
-
-
-# Boundary conditions dictionary
-bcs = {
-    'east': boundary_east,
-    'north': boundary_north,
-    'west': boundary_west,
-    'south': boundary_south
-}
-
-# BVP instance
-bvp = BVP2D(PDE_func=laplace_pde, domain_bounds=domain_bounds, bcs=bcs)
-
-# Neural network parameters
-input_features = 2
-output_features = 1
-hidden_units = 50
-depth = 2
-
-# Create the neural network
-model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
-
-# Optimizer
-optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-# Loss class instance
-loss_class = CustomLoss(bvp)
-
+    plt.tight_layout()
+    plt.show()
 
 # (random mesh, FORCED to include BOUNDARY points!)
 def random_mesh(domain_bounds, num_interior_points, x_bound_points, y_bound_points):
@@ -238,8 +242,74 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 
     return xy_train
 
-# GENERATE MESH
+####################################################################################################
+####################################################################################################
+####################################################################################################
+
+BVP_NO = 0
+BAR_APPROACH = True
+
+if BVP_NO == 0:
+    def laplace_pde(xy, u, u_x, u_y, u_xx, u_yy):
+        return u_xx + u_yy
+
+    def boundary_east(x):
+        return 0.0
+    def boundary_west(x):
+        return 0.0
+    def boundary_north(y):
+        return 0.0
+    def boundary_south(y):
+        return 0.0 
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+
+    # Function satisfying boundary conditions
+    def g_func(xy):
+        return torch.zeros(xy.size(0))
+
+    def exact_sol(xy):
+        # Since the boundary conditions and the PDE suggest a trivial solution:
+        return torch.zeros(xy.shape[0], 1)
+
+    no_epochs = 500
+    learning_rate = 0.05
+
+
+# Boundary conditions dictionary
+bcs = {
+    'east': boundary_east,
+    'north': boundary_north,
+    'west': boundary_west,
+    'south': boundary_south
+}
+
+# BVP instance
+bvp = BVP2D(PDE_func=laplace_pde, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
+
+# Neural network parameters
+input_features = 2
+output_features = 1
+hidden_units = 50
+depth = 2
+
+# Create the neural network
+model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
+
+# Optimizer
+optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+# Loss class instance
+loss_class = CustomLoss(bvp)
+
+# GENERATE MESHES
 xy_train = uniform_mesh(domain_bounds, 50, 50)
+xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs)
+
+# PLOTTING
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, plot_type='surface')
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, plot_type='contour')
