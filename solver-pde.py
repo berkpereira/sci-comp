@@ -67,3 +67,46 @@ class NeuralNetwork2D(nn.Module):
             return self.u_bar_scaling(xy, u_hat)
         else:
             return u_hat
+        
+class CustomLoss(nn.Module):
+    def __init__(self, bvp, gamma=10, bar_approach=False):
+        super().__init__()
+        self.bvp = bvp
+        self.gamma = gamma
+        self.bar_approach = bar_approach
+    
+    def forward(self, xy, u):
+        u.requires_grad_(True)
+
+        # Create gradient vectors for each component
+        grad_outputs = torch.ones_like(u)
+
+        # Partial derivatives with respect to each input dimension
+        grads = torch.autograd.grad(u, xy, grad_outputs=grad_outputs, create_graph=True)[0]
+        u_x, u_y = grads[:, 0], grads[:, 1]
+
+        # Second derivatives
+        u_xx = torch.autograd.grad(u_x, xy, grad_outputs=grad_outputs, create_graph=True)[0][:, 0]
+        u_yy = torch.autograd.grad(u_y, xy, grad_outputs=grad_outputs, create_graph=True)[0][:, 1]
+
+        pde_loss = torch.mean(self.bvp.eval_pde(xy, u, u_x, u_y, u_xx, u_yy) ** 2)
+
+        if self.bar_approach:
+            return pde_loss
+        else:
+            # Boundary conditions loss (Dirichlet)
+            bc_loss = 0
+            # Assign boundary values using the callable attributes from self.bvp.bcs
+            east_mask = (xy[:, 1] == 1)  # y = 1
+            north_mask = (xy[:, 0] == 1)  # x = 1
+            west_mask = (xy[:, 1] == 0)  # y = 0
+            south_mask = (xy[:, 0] == 0)  # x = 0
+
+            # Compute boundary errors
+            bc_loss += torch.mean((u[east_mask] - self.bvp.bcs['east'](xy[east_mask, 0])) ** 2)
+            bc_loss += torch.mean((u[north_mask] - self.bvp.bcs['north'](xy[north_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[west_mask] - self.bvp.bcs['west'](xy[west_mask, 0])).pow(2))
+            bc_loss += torch.mean((u[south_mask] - self.bvp.bcs['south'](xy[south_mask, 1])).pow(2))
+
+            # Return total loss
+            return pde_loss + self.gamma * bc_loss
