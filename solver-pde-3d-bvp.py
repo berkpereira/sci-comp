@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # Enable LaTeX rendering
 
@@ -157,66 +156,43 @@ def train_model(model, optimiser, bvp, loss_class, xyz_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-def plot_predictions(model, xyz_train_tensor, xyz_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface'):
-    # Convert the evaluation tensor to numpy for plotting
-    xyz_eval_numpy = xyz_eval_tensor.detach().numpy()
+# PLOTTING FUNCTIONS
+def plot_isosurface(model, xyz_eval, level, exact_sol_func=None):
+    xyz_eval_numpy = xyz_eval.detach().numpy()
+    grid_dim = int(np.cbrt(xyz_eval_numpy.shape[0]))  # Assuming a cubic grid
+    x_eval, y_eval, z_eval = xyz_eval_numpy[:, 0].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 1].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 2].reshape(grid_dim, grid_dim, grid_dim)
+
+    mlab.figure(bgcolor=(1, 1, 1))
+    u_pred_tensor = model(xyz_eval) # tensor input
+    u_pred_numpy = u_pred_tensor.detach().numpy().reshape(grid_dim, grid_dim, grid_dim)
+
+    src = mlab.contour3d(x_eval, y_eval, z_eval, u_pred_numpy, contours=[level], opacity=0.5)
     
-    # Predictions from the neural network
-    if eval_nn_at_train:
-        u_pred_tensor = model(xyz_train_tensor)
-        xyz_plot = xyz_train_tensor
-    else:
-        u_pred_tensor = model(xyz_eval_tensor)
-        xyz_plot = xyz_eval_tensor
-
-    u_pred_numpy = u_pred_tensor.detach().numpy()
-
-    # Reshape for plotting
-    num_points_per_dim = int(np.sqrt(xyz_plot.shape[0]))
-    x = xyz_plot[:, 0].view(num_points_per_dim, num_points_per_dim).detach().numpy()
-    y = xyz_plot[:, 1].view(num_points_per_dim, num_points_per_dim).detach().numpy()
-    z = xyz_plot[:, 2].view(num_points_per_dim, num_points_per_dim).detach().numpy()
-    u_pred_reshaped = u_pred_numpy.reshape(num_points_per_dim, num_points_per_dim)
-
-    # HOW TO PLOT?
-
-    # Plotting
-    fig, axs = plt.subplots(1, 2, figsize=(18, 8), subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
+    mlab.title('Neural Network Solution', color=(0, 0, 0))
+    mlab.axes(src, color=(0, 0, 0), xlabel='x', ylabel='y', zlabel='z')
+    mlab.colorbar(object=src, title='Value', label_fmt='%.2f')
     
-    if plot_type == 'surface':
-        surf = axs[0].plot_surface(x, y, u_pred_reshaped, cmap='viridis', edgecolor='none')
-        axs[0].set_title('Neural Network Predictions')
-        axs[0].set_xlabel('x')
-        axs[0].set_ylabel('y')
-        axs[0].set_zlabel('u')
-        fig.colorbar(surf, ax=axs[0], shrink=0.5, aspect=5)
-    elif plot_type == 'contour':
-        contour = axs[0].contourf(x, y, u_pred_reshaped, cmap='viridis', levels=50)
-        axs[0].set_title('Neural Network Predictions')
-        axs[0].set_xlabel('x')
-        axs[0].set_ylabel('y')
-        fig.colorbar(contour, ax=axs[0], shrink=0.5, aspect=5)
+    # Adjust colorbar text color to black
+    color_bar = mlab.colorbar(object=src, title='Value', label_fmt='%.2f')
+    color_bar.label_text_property.color = (0, 0, 0)
+    color_bar.title_text_property.color = (0, 0, 0)
+
+    mlab.show()
 
     if exact_sol_func is not None:
-        u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
-        if plot_type == 'surface':
-            surf = axs[1].plot_surface(x, y, u_exact_numpy, cmap='viridis', edgecolor='none')
-            axs[1].set_title('Exact Solution')
-            axs[1].set_xlabel('x')
-            axs[1].set_ylabel('y')
-            axs[1].set_zlabel('u')
-            fig.colorbar(surf, ax=axs[1], shrink=0.5, aspect=5)
-        elif plot_type == 'contour':
-            contour = axs[1].contourf(x, y, u_exact_numpy, cmap='viridis', levels=50)
-            axs[1].set_title('Exact Solution')
-            axs[1].set_xlabel('x')
-            axs[1].set_ylabel('y')
-            fig.colorbar(contour, ax=axs[1], shrink=0.5, aspect=5)
-    else:
-        axs[1].set_title('No exact solution provided')
+        u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(grid_dim, grid_dim, grid_dim)
+        mlab.figure(bgcolor=(1, 1, 1))
+        src = mlab.contour3d(x_eval, y_eval, z_eval, u_exact_numpy, contours=[level], opacity=0.5)
+        mlab.title('Exact Solution', color=(0, 0, 0))
+        mlab.axes(src, color=(0, 0, 0), xlabel='x', ylabel='y', zlabel='z')
+        mlab.colorbar(object=src, title='Value', label_fmt='%.2f')
+        
+        # Adjust colorbar text color to black
+        color_bar = mlab.colorbar(object=src, title='Value', label_fmt='%.2f')
+        color_bar.label_text_property.color = (0, 0, 0)
+        color_bar.title_text_property.color = (0, 0, 0)
+        mlab.show()
 
-    plt.tight_layout()
-    plt.show()
 
 def plot_loss_vs_epoch(loss_values):
     plt.figure(figsize=FIGSIZE)
@@ -261,67 +237,93 @@ def plot_pde_residuals(model, bvp, xyz_train_tensor):
     plt.show()
 
 # MESH GENERATION
-def random_mesh(domain_bounds, num_interior_points, x_bound_points, y_bound_points):
+def random_mesh(domain_bounds, num_interior_points, x_bound_points, y_bound_points, z_bound_points):
     # Calculate the scaling and offset for the interior points
     x_range = domain_bounds['x'][1] - domain_bounds['x'][0]
     y_range = domain_bounds['y'][1] - domain_bounds['y'][0]
+    z_range = domain_bounds['z'][1] - domain_bounds['z'][0]
     x_offset = domain_bounds['x'][0]
     y_offset = domain_bounds['y'][0]
+    z_offset = domain_bounds['z'][0]
 
     # Interior points
-    interior = torch.rand(num_interior_points, 2)
+    interior = torch.rand(num_interior_points, 3)
     interior[:, 0] = interior[:, 0] * x_range + x_offset
     interior[:, 1] = interior[:, 1] * y_range + y_offset
+    interior[:, 2] = interior[:, 2] * z_range + z_offset
 
     # Boundary points
     x_edges = torch.linspace(domain_bounds['x'][0], domain_bounds['x'][1], steps=x_bound_points)
     y_edges = torch.linspace(domain_bounds['y'][0], domain_bounds['y'][1], steps=y_bound_points)
-    boundary = torch.cat([
-        torch.stack([x_edges, torch.full_like(x_edges, domain_bounds['y'][0])], dim=1),  # Bottom
-        torch.stack([x_edges, torch.full_like(x_edges, domain_bounds['y'][1])], dim=1),  # Top
-        torch.stack([torch.full_like(y_edges, domain_bounds['x'][0]), y_edges], dim=1),  # Left
-        torch.stack([torch.full_like(y_edges, domain_bounds['x'][1]), y_edges], dim=1)   # Right
-    ])
+    z_edges = torch.linspace(domain_bounds['z'][0], domain_bounds['z'][1], steps=z_bound_points)
+    # Create grid points for each face of the cube
+    xy_plane_z0 = torch.stack(torch.meshgrid(x_edges, y_edges, indexing='ij'), dim=-1).reshape(-1, 2)
+    xy_plane_z1 = xy_plane_z0.clone()
+    xy_plane_z0 = torch.cat([xy_plane_z0, torch.full_like(xy_plane_z0[:, :1], domain_bounds['z'][0])], dim=1)
+    xy_plane_z1 = torch.cat([xy_plane_z1, torch.full_like(xy_plane_z1[:, :1], domain_bounds['z'][1])], dim=1)
+
+    xz_plane_y0 = torch.stack(torch.meshgrid(x_edges, z_edges, indexing='ij'), dim=-1).reshape(-1, 2)
+    xz_plane_y1 = xz_plane_y0.clone()
+    xz_plane_y0 = torch.cat([xz_plane_y0[:, :1], torch.full_like(xz_plane_y0[:, :1], domain_bounds['y'][0]), xz_plane_y0[:, 1:]], dim=1)
+    xz_plane_y1 = torch.cat([xz_plane_y1[:, :1], torch.full_like(xz_plane_y1[:, :1], domain_bounds['y'][1]), xz_plane_y1[:, 1:]], dim=1)
+
+    yz_plane_x0 = torch.stack(torch.meshgrid(y_edges, z_edges, indexing='ij'), dim=-1).reshape(-1, 2)
+    yz_plane_x1 = yz_plane_x0.clone()
+    yz_plane_x0 = torch.cat([torch.full_like(yz_plane_x0[:, :1], domain_bounds['x'][0]), yz_plane_x0], dim=1)
+    yz_plane_x1 = torch.cat([torch.full_like(yz_plane_x1[:, :1], domain_bounds['x'][1]), yz_plane_x1], dim=1)
+
+    # Combine all boundary points
+    boundary = torch.cat([xy_plane_z0, xy_plane_z1, xz_plane_y0, xz_plane_y1, yz_plane_x0, yz_plane_x1], dim=0)
 
     # Combine interior and boundary points
     xyz_train = torch.cat([interior, boundary], dim=0)
     xyz_train.requires_grad_(True)
     return xyz_train
 
-def uniform_mesh(domain_bounds, x_points, y_points):
+def uniform_mesh(domain_bounds, x_points, y_points, z_points):
+    # Generate linearly spaced points for each dimension
     x_points = torch.linspace(domain_bounds['x'][0], domain_bounds['x'][1], steps=x_points)
     y_points = torch.linspace(domain_bounds['y'][0], domain_bounds['y'][1], steps=y_points)
+    z_points = torch.linspace(domain_bounds['z'][0], domain_bounds['z'][1], steps=z_points)
 
-    x_grid, y_grid = torch.meshgrid(x_points, y_points, indexing='ij')  # Create a mesh grid
-    xyz_train = torch.stack([x_grid.flatten(), y_grid.flatten()], dim=1)  # Flatten and stack to create 3D points
+    # Create a mesh grid for 3D space
+    x_grid, y_grid, z_grid = torch.meshgrid(x_points, y_points, z_points, indexing='ij')  # Adjust for 3D
+
+    # Flatten and stack to create 3D points
+    xyz_train = torch.stack([x_grid.flatten(), y_grid.flatten(), z_grid.flatten()], dim=1)
 
     xyz_train.requires_grad_(True)  # Enable gradient tracking
 
     return xyz_train
 
+
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 4
+BVP_NO = 1
 BAR_APPROACH = True
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
-    def PDE_func(xyz, u, u_x, u_y, u_xx, u_yy):
-        return u_xx + u_yy
+    def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
+        return torch.squeeze(u_xx + u_yy + u_zz)
 
-    def boundary_east(x):
+    def boundary_east(x, z):
         return 0.0
-    def boundary_west(x):
+    def boundary_west(x, z):
         return 0.0
-    def boundary_north(y):
+    def boundary_north(y, z):
         return 0.0
-    def boundary_south(y):
-        return 0.0 
+    def boundary_south(y, z):
+        return 0.0
+    def boundary_bottom(x, y):
+        return 0.0
+    def boundary_top(x, y):
+        return 0.0
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+    domain_bounds = {'x': (0, 1), 'y': (0, 1), 'z': (0, 1)}
 
     # Function satisfying boundary conditions
     def g_func(xyz):
@@ -331,38 +333,45 @@ if BVP_NO == 0:
         # Since the boundary conditions and the PDE suggest a trivial solution:
         return torch.zeros(xyz.shape[0], 1)
 
-    no_epochs = 500
+    no_epochs = 30
     learning_rate = 0.05
 
     gamma=10
 if BVP_NO == 1:
     # Laplace's equation
-    def PDE_func(xyz, u, u_x, u_y, u_xx, u_yy):
-        return torch.squeeze(u_xx + u_yy) + (2 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xyz[:,0])) * torch.sin(np.pi * torch.squeeze(xyz[:,1])))
+    def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
+        return torch.squeeze(u_xx + u_yy + u_zz) + (3 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xyz[:,0])) * torch.sin(np.pi * torch.squeeze(xyz[:,1])) * torch.sin(np.pi * torch.squeeze(xyz[:,2])))
 
-    def boundary_east(y):
+    def boundary_east(x, z):
         return 0.0
-    def boundary_west(y):
+    def boundary_west(x, z):
         return 0.0
-    def boundary_north(x):
+    def boundary_north(y, z):
         return 0.0
-    def boundary_south(x):
-        return 0.0 
+    def boundary_south(y, z):
+        return 0.0
+    def boundary_bottom(x, y):
+        return 0.0
+    def boundary_top(x, y):
+        return 0.0
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+    domain_bounds = {'x': (0, 1), 'y': (0, 1), 'z': (0, 1)}
 
     # Function satisfying boundary conditions
     def g_func(xyz):
         return torch.zeros(xyz.size(0))
 
     def exact_sol(xyz):
-        return np.sin(np.pi * xyz[:,0]) * np.sin(np.pi * xyz[:,1])
+        return np.sin(np.pi * xyz[:,0]) * np.sin(np.pi * xyz[:,1]) * np.sin(np.pi * xyz[:,2])
 
-    no_epochs = 1500
-    learning_rate = 0.05
+    no_epochs = 300
+    learning_rate = 0.2
 
     gamma = 100
+
+    # For plotting isosurfaces
+    level = 0.5
 if BVP_NO == 2:
     # Laplace's equation, higher frequency!
     # THIS ONE REALLY BENEFITS FROM HIGHER NUMBER OF POINTS (e.g., 50 per direction)
@@ -488,41 +497,42 @@ if BVP_NO == 5:
 
 # Boundary conditions dictionary
 bcs = {
-    'east': boundary_east,
-    'north': boundary_north,
-    'west': boundary_west,
-    'south': boundary_south
+    'east':   boundary_east,
+    'north':  boundary_north,
+    'west':   boundary_west,
+    'south':  boundary_south,
+    'bottom': boundary_bottom,
+    'top':    boundary_top
 }
 
 # BVP instance
 bvp = BVP3D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
 
 # Neural network parameters
-input_features = 2
-output_features = 1
-
 hidden_units = 50
 depth = 1
 
 # Create the neural network
-model = NeuralNetwork3D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
+model = NeuralNetwork3D(bvp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
-optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
+optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Loss class instance
 loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-xyz_train = uniform_mesh(domain_bounds, 50, 50)
+xyz_train = uniform_mesh(domain_bounds, 25, 25, 25)
 # xyz_train = random_mesh(domain_bounds, 1000, 50, 50)
-xyz_eval  = uniform_mesh(domain_bounds, 50, 50)
+xyz_eval  = uniform_mesh(domain_bounds, 50, 50, 50)
 
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xyz_train, no_epochs)
 
 # PLOTTING
-plot_predictions(model, xyz_train, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
+from mpl_toolkits.mplot3d import Axes3D
+from mayavi import mlab
+plot_isosurface(model, xyz_eval, level=level, exact_sol_func=exact_sol)
 # plot_predictions(model, xyz_train, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
-plot_loss_vs_epoch(loss_values)
-plot_pde_residuals(model, bvp, xyz_train)
+# plot_loss_vs_epoch(loss_values)
+# plot_pde_residuals(model, bvp, xyz_train)
