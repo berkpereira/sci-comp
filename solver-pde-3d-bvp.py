@@ -6,13 +6,15 @@ import matplotlib.pyplot as plt
 # Enable LaTeX rendering
 
 plt.rcParams.update({
-    'font.size': 12,
+    'font.size': 11,
     "text.usetex": True,
     "font.family": "serif"
 })
 
+plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d-'
+
 # DEFAULT FIG SIZE
-FIGSIZE = (10, 8)
+FIGSIZE = (6, 4)
 
 torch.manual_seed(42)
 
@@ -157,7 +159,7 @@ def train_model(model, optimiser, bvp, loss_class, xyz_train, no_epochs):
     return loss_values  # Return the list of loss values
 
 # PLOTTING FUNCTIONS
-def plot_isosurface(model, xyz_eval, level, exact_sol_func=None):
+def plot_isosurface_mlab(model, xyz_eval, level, exact_sol_func=None):
     xyz_eval_numpy = xyz_eval.detach().numpy()
     grid_dim = int(np.cbrt(xyz_eval_numpy.shape[0]))  # Assuming a cubic grid
     x_eval, y_eval, z_eval = xyz_eval_numpy[:, 0].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 1].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 2].reshape(grid_dim, grid_dim, grid_dim)
@@ -193,6 +195,132 @@ def plot_isosurface(model, xyz_eval, level, exact_sol_func=None):
         color_bar.title_text_property.color = (0, 0, 0)
         mlab.show()
 
+def plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=None):
+    xyz_eval_numpy = xyz_eval.detach().numpy()
+    grid_dim = int(np.cbrt(xyz_eval_numpy.shape[0]))  # Assuming a cubic grid
+    x_eval, y_eval, z_eval = xyz_eval_numpy[:, 0].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 1].reshape(grid_dim, grid_dim, grid_dim), xyz_eval_numpy[:, 2].reshape(grid_dim, grid_dim, grid_dim)
+
+    if eval_nn_at_train:
+        u_pred_tensor = model(xyz_eval)  # Evaluate the model
+    else:
+        u_pred_tensor = model(xyz_eval)  # Evaluate the model on eval data if different from training data
+
+    u_pred_numpy = u_pred_tensor.detach().numpy().reshape(grid_dim, grid_dim, grid_dim)
+
+    # Configure Mayavi figure
+    fig = mlab.figure(bgcolor=(1, 1, 1), size=(800, 800))
+
+    # Volume rendering of the predicted solution
+    src = mlab.pipeline.scalar_field(x_eval, y_eval, z_eval, u_pred_numpy)
+    vol = mlab.pipeline.volume(src, vmin=u_pred_numpy.min(), vmax=u_pred_numpy.max())
+    vol._volume_property.set_scalar_opacity_unit_distance(0.1)  # Smaller values give higher opacity
+
+    mlab.title('Neural Network Solution', color=(0, 0, 0))
+    mlab.orientation_axes()
+
+    # Display the colorbar and set its properties
+    mlab.colorbar(object=vol, title='Value', orientation='vertical', label_fmt='%.2f')
+    mlab.outline(color=(0, 0, 0))
+
+    # Render the exact solution if a function is provided
+    if exact_sol_func is not None:
+        u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(grid_dim, grid_dim, grid_dim)
+        mlab.figure(bgcolor=(1, 1, 1), size=(800, 800))
+        src2 = mlab.pipeline.scalar_field(x_eval, y_eval, z_eval, u_exact_numpy)
+        vol2 = mlab.pipeline.volume(src2, vmin=u_exact_numpy.min(), vmax=u_exact_numpy.max())
+        mlab.title('Exact Solution', color=(0, 0, 0))
+        mlab.orientation_axes()
+        mlab.colorbar(object=vol2, title='Value', orientation='vertical', label_fmt='%.2f')
+        mlab.outline(color=(0, 0, 0))
+
+    mlab.show()
+
+def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train=False, exact_sol_func=None):
+    xyz_eval_numpy = xyz_eval.detach().numpy()
+    grid_dim = int(np.cbrt(xyz_eval_numpy.shape[0]))
+    x_eval, y_eval, z_eval = np.meshgrid(
+        np.linspace(0, 1, grid_dim),
+        np.linspace(0, 1, grid_dim),
+        np.linspace(0, 1, grid_dim),
+        indexing='ij'
+    )
+
+    if eval_nn_at_train:
+        u_pred_tensor = model(xyz_eval)  # Evaluate the model
+    else:
+        u_pred_tensor = model(xyz_eval)  # Evaluate the model on eval data if different from training data
+
+    u_pred_numpy = u_pred_tensor.detach().numpy().reshape(grid_dim, grid_dim, grid_dim)
+
+    # Setup the ImageData grid
+    grid = pv.ImageData(spacing=(1 / (grid_dim - 1), 1 / (grid_dim - 1), 1 / (grid_dim - 1)),
+                        origin=(0, 0, 0), dimensions=(grid_dim, grid_dim, grid_dim))
+    grid.point_data['values'] = u_pred_numpy.flatten(order='F')  # Assign values to the grid points
+
+    # Setup plotter
+    plotter = pv.Plotter(shape=(1, 2), window_size=(96*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
+    plotter.subplot(0, 0)
+
+    # Formatting options
+    pv_font_size = 10
+    pv_font_family = 'times' # times, arial, courier
+    pv_bar_width = 0.5
+    pv_bar_position_x = (1 - pv_bar_width) / 2
+    pv_n_labels = 5
+    pv_title_position = 'upper_edge'
+    pv_title_font_size = 12
+    scalar_bar_dict = {'title': 'u(x, y, z)', 'width': pv_bar_width, 'position_x':pv_bar_position_x, 'label_font_size': pv_font_size, 'font_family': pv_font_family, 'n_labels': pv_n_labels, 'use_opacity': False}
+
+    # Add volume to the plotter
+
+    plotter.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
+    # plotter.add_scalar_bar(title="", label_font_size=10, title_font_size=10, width=0.5)
+    plotter.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+
+    if exact_sol_func is not None:
+        u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(grid_dim, grid_dim, grid_dim)
+        grid_exact = pv.ImageData(spacing=(1 / (grid_dim - 1), 1 / (grid_dim - 1), 1 / (grid_dim - 1)),
+                                  origin=(0, 0, 0), dimensions=(grid_dim, grid_dim, grid_dim))
+        grid_exact.point_data['values'] = u_exact_numpy.flatten(order='F')  # Assign values to the grid points
+
+        plotter.subplot(0, 1)
+        plotter.add_volume(grid_exact, scalars='values', cmap='inferno', opacity=opacity_str)
+        plotter.add_scalar_bar(title="u(x, y, z)", font_family=pv_font_family, label_font_size=pv_font_size, width=pv_bar_width, position_x=pv_bar_position_x, n_labels=pv_n_labels, use_opacity=False)
+
+        plotter.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+
+
+    plotter.show()
+
+def plot_isosurface_pyvista(model, xyz_eval, level, exact_sol_func=None):
+    # Ensure the input tensor does not require gradient computation
+    xyz_eval = xyz_eval.detach()
+
+    # Predict using the neural network
+    u_pred = model(xyz_eval).detach().reshape(-1).numpy()
+
+    # Convert the XYZ coordinates and predictions into a PyVista grid
+    grid_dim = int(np.cbrt(len(xyz_eval)))  # Assume cubic domain for reshaping
+    xyz_eval_numpy = xyz_eval.numpy().reshape(grid_dim, grid_dim, grid_dim, 3)
+    grid = pv.StructuredGrid(xyz_eval_numpy[:,:,:,0], xyz_eval_numpy[:,:,:,1], xyz_eval_numpy[:,:,:,2])
+    grid["values"] = u_pred
+
+    # Create a plotter and add the neural network solution as an isosurface
+    plotter = pv.Plotter()
+    plotter.add_mesh(grid.contour(isosurfaces=level, scalars="values"),
+                     opacity=0.5, color="red", name="NN Solution")
+
+    # If an exact solution function is provided, plot it as well
+    if exact_sol_func:
+        u_exact = exact_sol_func(xyz_eval).detach().numpy()
+        grid["exact_values"] = u_exact
+        plotter.add_mesh(grid.contour(isosurfaces=level, scalars="exact_values"),
+                         opacity=0.5, color="blue", name="Exact Solution")
+
+    # Add labels and show the plot
+    plotter.add_axes()
+    plotter.add_title("Isosurface of Neural Network and Exact Solutions")
+    plotter.show()
 
 def plot_loss_vs_epoch(loss_values):
     plt.figure(figsize=FIGSIZE)
@@ -228,7 +356,7 @@ def plot_pde_residuals(model, bvp, xyz_train_tensor):
     residuals_reshaped = residuals.reshape(num_points_per_dim, num_points_per_dim)
 
     # Plotting
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=FIGSIZE)
     contour = plt.contourf(x, y, residuals_reshaped, cmap='viridis')
     plt.colorbar(contour)
     plt.title('PDE Residuals (abs) Across the Domain')
@@ -301,7 +429,7 @@ def uniform_mesh(domain_bounds, x_points, y_points, z_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 1
+BVP_NO = 2
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -342,13 +470,13 @@ if BVP_NO == 1:
     def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
         return torch.squeeze(u_xx + u_yy + u_zz) + (3 * (np.pi**2) * torch.sin(np.pi * torch.squeeze(xyz[:,0])) * torch.sin(np.pi * torch.squeeze(xyz[:,1])) * torch.sin(np.pi * torch.squeeze(xyz[:,2])))
 
-    def boundary_east(x, z):
+    def boundary_east(y, z):
         return 0.0
-    def boundary_west(x, z):
+    def boundary_west(y, z):
         return 0.0
-    def boundary_north(y, z):
+    def boundary_north(x, z):
         return 0.0
-    def boundary_south(y, z):
+    def boundary_south(x, z):
         return 0.0
     def boundary_bottom(x, y):
         return 0.0
@@ -373,39 +501,44 @@ if BVP_NO == 1:
     # For plotting isosurfaces
     level = 0.5
 if BVP_NO == 2:
-    # Laplace's equation, higher frequency!
-    # THIS ONE REALLY BENEFITS FROM HIGHER NUMBER OF POINTS (e.g., 50 per direction)
+    # Laplace's equation, higher frequency (modest for 3D...)!
 
-    # GOOD SOLUTION OBTAINED:
-    # Use, e.g., bar approach = True, 50 points per direction (uniform), 50 wide, 1 deep,
-    # lr = 0.005, LBFGS optimiser, no_epochs = 500
+    def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
+        return torch.squeeze(u_xx + u_yy + u_zz) + (3 * (2 * np.pi)**2 * torch.sin(2 * np.pi * torch.squeeze(xyz[:,0])) * torch.sin(2 * np.pi * torch.squeeze(xyz[:,1])) * torch.sin(2 * np.pi * torch.squeeze(xyz[:,2])))
 
-    def PDE_func(xyz, u, u_x, u_y, u_xx, u_yy):
-        return torch.squeeze(u_xx + u_yy) + (2 * (4 * np.pi)**2 * torch.sin(4 * np.pi * torch.squeeze(xyz[:,0])) * torch.sin(4 * np.pi * torch.squeeze(xyz[:,1])))
-
-    def boundary_east(y):
+    def boundary_east(y, z):
         return 0.0
-    def boundary_west(y):
+    def boundary_west(y, z):
         return 0.0
-    def boundary_north(x):
+    def boundary_north(x, z):
         return 0.0
-    def boundary_south(x):
-        return 0.0 
+    def boundary_south(x, z):
+        return 0.0
+    def boundary_bottom(x, y):
+        return 0.0
+    def boundary_top(x, y):
+        return 0.0
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+    domain_bounds = {'x': (0, 1), 'y': (0, 1), 'z': (0, 1)}
 
     # Function satisfying boundary conditions
     def g_func(xyz):
         return torch.zeros(xyz.size(0))
 
     def exact_sol(xyz):
-        return np.sin(4 * np.pi * xyz[:,0]) * np.sin(4 * np.pi * xyz[:,1])
+        return np.sin(2 * np.pi * xyz[:,0]) * np.sin(2 * np.pi * xyz[:,1]) * np.sin(2 * np.pi * xyz[:,2])
 
-    no_epochs = 650
-    learning_rate = 0.007
+    # no_epochs = 2000 # with Adam
+    no_epochs = 10 # with LBFGS
+    
+    # learning_rate = 0.12 # with Adam
+    learning_rate = 0.1 # with LBFGS
 
     gamma = 100
+    
+    # opacity_str = 'sigmoid_1' # map from -1 to 1
+    opacity_str = 0.08
 if BVP_NO == 3:
     # Laplace's equation
     def PDE_func(xyz, u, u_x, u_y, u_xx, u_yy):
@@ -438,24 +571,28 @@ if BVP_NO == 3:
     gamma = 10
 if BVP_NO == 4:
     # Laplace's equation, linear solution
-    def PDE_func(xyz, u, u_x, u_y, u_xx, u_yy):
-        return torch.squeeze(u_xx + u_yy)
+    def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
+        return torch.squeeze(u_xx + u_yy + u_zz)
 
-    def boundary_east(y):
+    def boundary_east(y, z):
         return 1
-    def boundary_west(y):
+    def boundary_west(y, z):
         return 0
-    def boundary_north(x):
+    def boundary_north(x, z):
         return x
-    def boundary_south(x):
+    def boundary_south(x, z):
+        return x
+    def boundary_bottom(x, y):
+        return x
+    def boundary_top(x, y):
         return x
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 'y': (0, 1)}
+    domain_bounds = {'x': (0, 1), 'y': (0, 1), 'z': (0, 1)}
 
     # Function satisfying boundary conditions
     def g_func(xyz):
-        x, y = torch.squeeze(xyz[:,0]), torch.squeeze(xyz[:,1])
+        x, y, z = torch.squeeze(xyz[:,0]), torch.squeeze(xyz[:,1]), torch.squeeze(xyz[:,2])
         return x
 
     def exact_sol(xyz):
@@ -516,7 +653,7 @@ depth = 1
 model = NeuralNetwork3D(bvp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
-optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
 
 # Loss class instance
 loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
@@ -530,9 +667,14 @@ xyz_eval  = uniform_mesh(domain_bounds, 50, 50, 50)
 loss_values = train_model(model, optimiser, bvp, loss_class, xyz_train, no_epochs)
 
 # PLOTTING
-from mpl_toolkits.mplot3d import Axes3D
-from mayavi import mlab
-plot_isosurface(model, xyz_eval, level=level, exact_sol_func=exact_sol)
-# plot_predictions(model, xyz_train, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
 # plot_loss_vs_epoch(loss_values)
 # plot_pde_residuals(model, bvp, xyz_train)
+
+# from mpl_toolkits.mplot3d import Axes3D
+# from mayavi import mlab
+# plot_isosurface_mlab(model, xyz_eval, level=level, exact_sol_func=exact_sol)
+# plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol)
+
+import pyvista as pv
+# plot_isosurface_pyvista(model, xyz_eval, level=[0.2, 0.5], exact_sol_func=exact_sol)
+plot_volume_rendering_pyvista(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, opacity_str=opacity_str)
