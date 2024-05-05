@@ -17,13 +17,14 @@ FIGSIZE = (10, 8)
 
 torch.manual_seed(42)
 
-# WARNING: EVEN THOUGH THE CODE MAY SUGGEST OTHERWISE, THIS CURRENTLY ONLY WORKS FOR CUBES (0, 1)^3, NO OTHER CUBOIDS.
-# For other cuboids would require (minor) adjustments.
+# WARNING: EVEN THOUGH THE CODE MAY SUGGEST OTHERWISE, THIS CURRENTLY ONLY WORKS FOR SPATIAL DOMAINS x in (0, 1).
+# For other dimensions would require (minor) adjustments.
+# Also TIME DOMAIN MUST BEGIN at t = 0.
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
 
-class BVP2D:
+class IVP2D:
     def __init__(self, PDE_func, domain_bounds, bcs, g_func=None):
         """
         Initialize a boundary value problem for a 2D second-order LINEAR PDE in a RECTANGULAR domain.
@@ -46,9 +47,9 @@ class BVP2D:
             raise Exception('Residual tensor should be one-dimensional!')
     
 class NeuralNetwork2D(nn.Module):
-    def __init__(self, bvp, input_features=2, output_features=1, hidden_units=50, depth=1, bar_approach=False):
+    def __init__(self, ivp, input_features=2, output_features=1, hidden_units=50, depth=1, bar_approach=False):
         super().__init__()
-        self.bvp = bvp
+        self.ivp = ivp
         self.bar_approach = bar_approach
         
         layers = [nn.Linear(in_features=input_features, out_features=hidden_units), nn.Sigmoid()]
@@ -65,7 +66,7 @@ class NeuralNetwork2D(nn.Module):
         self.stack = nn.Sequential(*layers)
     
     def u_bar_scaling(self, xt, u_hat):
-        return xt[:,0] * (1 - xt[:,0]) * xt[:,1] * (1 - xt[:,1]) * torch.squeeze(u_hat) + self.bvp.g_func(xt)
+        return xt[:,0] * (1 - xt[:,0]) * xt[:,1] * torch.squeeze(u_hat) + self.ivp.g_func(xt)
 
     def forward(self, xt):
         u_hat = self.stack(xt)
@@ -75,9 +76,9 @@ class NeuralNetwork2D(nn.Module):
             return u_hat.view(-1, 1) # Ensure singleton second dimension
         
 class CustomLoss(nn.Module):
-    def __init__(self, bvp, gamma=10, bar_approach=False):
+    def __init__(self, ivp, gamma=10, bar_approach=False):
         super().__init__()
-        self.bvp = bvp
+        self.ivp = ivp
         self.gamma = gamma
         self.bar_approach = bar_approach
     
@@ -95,29 +96,27 @@ class CustomLoss(nn.Module):
         u_xx = torch.autograd.grad(u_x, xt, grad_outputs=grad_outputs, create_graph=True)[0][:, 0].view(-1, 1)
         u_tt = torch.autograd.grad(u_t, xt, grad_outputs=grad_outputs, create_graph=True)[0][:, 1].view(-1, 1)
 
-        pde_loss = torch.mean(self.bvp.eval_pde(xt, u, u_x, u_t, u_xx, u_tt) ** 2)
+        pde_loss = torch.mean(self.ivp.eval_pde(xt, u, u_x, u_t, u_xx, u_tt) ** 2)
 
         if self.bar_approach:
             return pde_loss
         else:
             # Boundary conditions loss (Dirichlet)
             bc_loss = 0
-            # Assign boundary values using the callable attributes from self.bvp.bcs
+            # Assign boundary values using the callable attributes from self.ivp.bcs
             east_mask =  (xt[:, 0] == 1)  # x = 1
-            north_mask = (xt[:, 1] == 1)  # t = 1
             west_mask =  (xt[:, 0] == 0)  # x = 0
             south_mask = (xt[:, 1] == 0)  # t = 0
 
             # Compute boundary errors
-            bc_loss += torch.mean((u[east_mask]  - self.bvp.bcs['east'](xt[east_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[north_mask] - self.bvp.bcs['north'](xt[north_mask, 0])).pow(2))
-            bc_loss += torch.mean((u[west_mask]  - self.bvp.bcs['west'](xt[west_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[south_mask] - self.bvp.bcs['south'](xt[south_mask, 0])).pow(2))
+            bc_loss += torch.mean((u[east_mask]  - self.ivp.bcs['east'](xt[east_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[west_mask]  - self.ivp.bcs['west'](xt[west_mask, 1])).pow(2))
+            bc_loss += torch.mean((u[south_mask] - self.ivp.bcs['south'](xt[south_mask, 0])).pow(2))
 
             # Return total loss
             return pde_loss + self.gamma * bc_loss
         
-def train_model(model, optimiser, bvp, loss_class, xt_train, no_epochs):
+def train_model(model, optimiser, ivp, loss_class, xt_train, no_epochs):
     loss_values = [] # list to store loss values
 
     for epoch in range(no_epochs):
@@ -172,7 +171,7 @@ def plot_predictions(model, xt_train_tensor, xt_eval_tensor, eval_nn_at_train=Tr
     u_pred_reshaped = u_pred_numpy.reshape(num_points_per_dim, num_points_per_dim)
 
     # Plotting
-    fig, axs = plt.subplots(1, 2, figsize=(18, 8), subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
+    fig, axs = plt.subplots(1, 2, figsize=FIGSIZE, subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
     
     if plot_type == 'surface':
         surf = axs[0].plot_surface(x, t, u_pred_reshaped, cmap='viridis', edgecolor='none')
@@ -219,7 +218,7 @@ def plot_loss_vs_epoch(loss_values):
     plt.legend()
     plt.show()
 
-def plot_pde_residuals(model, bvp, xt_train_tensor):
+def plot_pde_residuals(model, ivp, xt_train_tensor):
     # Predictions from the neural network
     u_pred = model(xt_train_tensor)
 
@@ -234,7 +233,7 @@ def plot_pde_residuals(model, bvp, xt_train_tensor):
     u_tt = torch.autograd.grad(u_t, xt_train_tensor, grad_outputs=grad_outputs, create_graph=True)[0][:, 1]
 
     # Evaluate the PDE residuals
-    residuals = np.abs(bvp.eval_pde(xt_train_tensor, u_pred, u_x, u_t, u_xx, u_tt).detach().numpy())
+    residuals = np.abs(ivp.eval_pde(xt_train_tensor, u_pred, u_x, u_t, u_xx, u_tt).detach().numpy())
 
     # Reshape for plotting
     num_points_per_dim = int(np.sqrt(xt_train_tensor.shape[0]))
@@ -243,7 +242,7 @@ def plot_pde_residuals(model, bvp, xt_train_tensor):
     residuals_reshaped = residuals.reshape(num_points_per_dim, num_points_per_dim)
 
     # Plotting
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=FIGSIZE)
     contour = plt.contourf(x, t, residuals_reshaped, cmap='viridis')
     plt.colorbar(contour)
     plt.title('PDE Residuals (abs) Across the Domain')
@@ -289,3 +288,137 @@ def uniform_mesh(domain_bounds, x_points, t_points):
     xt_train.requires_grad_(True)  # Enable gradient tracking
 
     return xt_train
+
+####################################################################################################
+####################################################################################################
+####################################################################################################
+
+IVP_NO = 2
+BAR_APPROACH = False
+
+if IVP_NO == 0:
+    # Heat equation, TRIVIAL
+    alpha = 1
+    def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
+        return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
+
+    def boundary_east(x):
+        return 0.0
+    def boundary_west(x):
+        return 0.0
+    def boundary_south(t):
+        return 0.0 
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 't': (0, 3)}
+
+    # Function satisfying boundary conditions, for BAR APPROACH
+    def g_func(xt):
+        return torch.zeros(xt.size(0))
+
+    def exact_sol(xt):
+        # Since the boundary conditions and the PDE suggest a trivial solution:
+        return torch.zeros(xt.shape[0], 1)
+
+    no_epochs = 1500
+    learning_rate = 0.02
+
+    gamma=10
+elif IVP_NO == 1:
+        # Heat equation
+    alpha = 1
+    def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
+        return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
+
+    def boundary_east(t):
+        return 0.0
+    def boundary_west(t):
+        return 0.0
+    def boundary_south(x):
+        return torch.sin(np.pi * x)
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 't': (0, 0.2)}
+
+    # Function satisfying boundary conditions, for BAR APPROACH
+    def g_func(xt):
+        return torch.sin(np.pi * torch.squeeze(xt[:,0]))
+
+    def exact_sol(xt):
+        # Since the boundary conditions and the PDE suggest a trivial solution:
+        return np.exp(- np.pi**2 * xt[:,1]) * np.sin(np.pi * xt[:,0])
+
+    no_epochs = 3000
+    learning_rate = 0.03
+
+    gamma=10
+elif IVP_NO == 2:
+        # Heat equation
+        # LBFGS, 50 wide, 1 deep, with learning rate 0.02 works WAY better than Adam in this one (about 300--400 epochs)
+    alpha = 1
+    def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
+        return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
+
+    def boundary_east(t):
+        return 0.0
+    def boundary_west(t):
+        return 0.0
+    def boundary_south(x):
+        return torch.sin(np.pi * x) + 0.5 * torch.sin(3 * np.pi * x)
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 't': (0, 0.2)}
+
+    # Function satisfying boundary conditions, for BAR APPROACH
+    def g_func(xt):
+        return torch.sin(np.pi * xt[:,0]) + 0.5 * torch.sin(3 * np.pi * xt[:,0])
+
+    def exact_sol(xt):
+        # Since the boundary conditions and the PDE suggest a trivial solution:
+        return np.exp(- np.pi**2 * xt[:,1]) * np.sin(np.pi * xt[:,0]) + 0.5 * np.exp(- 9 * np.pi**2 * xt[:,1]) * np.sin(3 * np.pi * xt[:,0])
+
+    no_epochs = 10000
+    learning_rate = 0.004
+
+    gamma=5
+
+####################################################################################################
+####################################################################################################
+####################################################################################################
+
+# Boundary conditions dictionary
+bcs = {
+    'east':  boundary_east,
+    'west':  boundary_west,
+    'south': boundary_south
+}
+
+# IVP instance
+ivp = IVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
+
+# Neural network parameters
+hidden_units = 50
+depth = 1
+
+# Create the neural network
+model = NeuralNetwork2D(ivp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
+
+# Optimizer
+optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+# Loss class instance
+loss_class = CustomLoss(ivp, gamma=gamma, bar_approach=BAR_APPROACH)
+
+# GENERATE MESHES
+xt_train = uniform_mesh(domain_bounds, 30, 20)
+# xy_train = random_mesh(domain_bounds, 1000, 50, 50)
+xt_eval  = uniform_mesh(domain_bounds, 50, 50)
+
+# Training the model
+loss_values = train_model(model, optimiser, ivp, loss_class, xt_train, no_epochs)
+
+# PLOTTING
+plot_predictions(model, xt_train, xt_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
+plot_predictions(model, xt_train, xt_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
+plot_loss_vs_epoch(loss_values)
+plot_pde_residuals(model, ivp, xt_train)
