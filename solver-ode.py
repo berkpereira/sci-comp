@@ -14,7 +14,7 @@ plt.rcParams.update({
 })
 
 # DEFAULT FIG SIZE
-FIGSIZE = (10, 8)
+FIGSIZE = (6, 3)
 
 torch.manual_seed(42)
 
@@ -188,8 +188,8 @@ class CustomLoss(nn.Module):
         self.bar_approach = bar_approach
 
     def forward(self, x, y):
-        # Assuming y shape is [batch_size, num_equations]
-        batch_size, num_equations = y.shape
+        # Assuming y shape is [num_points, num_equations]
+        num_points, num_equations = y.shape
 
         # Prepare to collect derivatives
         y_x = torch.zeros_like(y)
@@ -256,7 +256,7 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
         # Store the loss value for this epoch
         loss_values.append(loss.item())
 
-        if epoch % 100 == 0:
+        if epoch % 10 == 0:
             print(f"Epoch: {epoch} | Loss: {loss.item():e}")
 
     return loss_values  # Return the list of loss values
@@ -296,12 +296,12 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
     # Plot predictions for each equation
     for i in range(num_equations):
         if eval_nn_at_train:
-            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
+            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (Eq. {i+1})', color='r', linestyle='--', marker='o')
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=f'NN Predictions (eq {i+1})', color='r', linestyle='--', marker='o')
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=f'NN Predictions (Eq. {i+1})', color='r', linestyle='--', marker='o')
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
-            axes[i].plot(x_eval_numpy, y_exact_numpy, label=f'Analytical Solution (eq {i+1})', color='b', linestyle='-')
+            axes[i].plot(x_eval_numpy, y_exact_numpy, label=f'Analytical Solution (Eq. {i+1})', color='b', linestyle='-')
         
         axes[i].set_xlabel('x')
         axes[i].set_ylabel('y')
@@ -328,7 +328,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
     y_xx = torch.autograd.grad(y_x, x_train_tensor, torch.ones_like(y_x), create_graph=True)[0]
     
     # Evaluate the ODE residuals
-    residuals = bvp.eval_ode(x_train_tensor, y_pred, y_x, y_xx).detach().numpy().flatten() ** 2
+    residuals = np.abs(bvp.eval_ode(x_train_tensor, y_pred, y_x, y_xx).detach().numpy().flatten())
     
     # Plotting
     plt.figure(figsize=FIGSIZE)
@@ -342,11 +342,10 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
     plt.show()
 
 
-"""
+####################################################################################################
+####################################################################################################
+####################################################################################################
 
-ENTERING RELEVANT PARAMETERS
-
-"""
 
 BVP_NO = 1
 BAR_APPROACH = True
@@ -374,6 +373,8 @@ if BVP_NO == 0:
     
     no_epochs = 300
     learning_rate = 0.004
+
+    gamma = 1.5
 elif BVP_NO == 1:
     # BVP with boundary layer solution
     eps = 0.015
@@ -390,8 +391,10 @@ elif BVP_NO == 1:
     )
     exact_sol = lambda x: np.array([x + (np.exp(- (1 - x) / eps) - np.exp(- 1 / eps)) / (np.exp(-1 / eps) - 1)])
     
-    no_epochs = 10000
-    learning_rate = 0.06
+    no_epochs = 12000
+    learning_rate = 0.05
+
+    gamma = 1.5
 elif BVP_NO == 2:
     # Right domain end is about x = 2.55
     def eqn1(x, y, y_x, y_xx):
@@ -408,6 +411,8 @@ elif BVP_NO == 2:
     
     no_epochs = 30000
     learning_rate = 0.0025
+
+    gamma = 200
 elif BVP_NO == 3:
     alphas = (1, 0, 0)
     ns = (1, 0, 0)
@@ -418,6 +423,8 @@ elif BVP_NO == 3:
 
     no_epochs = 20000
     learning_rate = 0.001
+
+    gamma = 0.1
 elif BVP_NO == 4:
     # Simple exact solution
     def eqn1(x, y, y_x, y_xx):
@@ -436,6 +443,8 @@ elif BVP_NO == 4:
     
     no_epochs = 500
     learning_rate = 0.02
+
+    gamma = 8
 elif BVP_NO == 5:
     # BVP proposed by Kathryn for y_bar approach
     # ODE: -y'' + y^2 = g(x)
@@ -450,6 +459,8 @@ elif BVP_NO == 5:
     
     no_epochs = 10000
     learning_rate = 0.001
+
+    gamma = 1.5
 elif BVP_NO == 6:
     # BVP proposed by Kathryn for Neumann BCs
     # ODE: -y'' + y^2 = g(x)
@@ -469,6 +480,8 @@ elif BVP_NO == 6:
     
     no_epochs = 2000
     learning_rate = 0.005
+
+    gamma = 1.5
 elif BVP_NO == 7:
     # BVP proposed by Kathryn for Neumann BCs
     # ODE: -y'' + y^2 = g(x)
@@ -485,6 +498,8 @@ elif BVP_NO == 7:
     
     no_epochs = 10000
     learning_rate = 0.004
+
+    gamma = 1.5
 elif BVP_NO == 8:
     # simple cos solution
     # neumann + dirichlet conditions
@@ -502,6 +517,8 @@ elif BVP_NO == 8:
 
     no_epochs = 5000
     learning_rate = 0.008
+
+    gamma = 1.5
 elif BVP_NO == 9:
     # 64 y + y'' = 0
     # Right domain end is about x = 2.55
@@ -519,6 +536,8 @@ elif BVP_NO == 9:
     
     no_epochs = 15000
     learning_rate = 0.002
+
+    gamma = 1.5
 elif BVP_NO == 10:
     # KATHRYN PROPOSED SYSTEM for u(x), v(x)
     # neumann + dirichlet conditions
@@ -543,6 +562,8 @@ elif BVP_NO == 10:
 
     no_epochs = 600
     learning_rate = 0.03
+
+    gamma = 10
 elif BVP_NO == 11:
     # proof of concept for systems solver. UNCOUPLED equations
     domain_ends = (0, 1)
@@ -568,6 +589,8 @@ elif BVP_NO == 11:
 
     no_epochs = 10000
     learning_rate = 0.003
+
+    gamma = 10
 elif BVP_NO == 12:
     # TRYING OUT ROBIN BCs
     # Right domain end is about x = 2.55
@@ -587,6 +610,8 @@ elif BVP_NO == 12:
     # GOING FROM 50 TO 150 TRAINING POINTS MAKES MASSIVE DIFFERENCE IN SOLUTION QUALITY IN BAR APPROACH
     no_epochs = 1500
     learning_rate = 0.004
+    
+    gamma = 10
 
     # COMMENTS ON THIS ONE:
     # GOOD FIT USING WIDTH 50, DEPTH 1, GAMMA APPROACH, GAMMA = 10,
@@ -602,35 +627,11 @@ my_bvp = BVP(
     bcs=bcs
 )
 
-if BVP_NO == 0:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 1:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 2:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=200, bar_approach=BAR_APPROACH)
-elif BVP_NO == 3:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=0.1, bar_approach=BAR_APPROACH)
-elif BVP_NO == 4:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=8, bar_approach=BAR_APPROACH)
-elif BVP_NO == 5:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 6:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 7:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 8:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 9:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
-elif BVP_NO == 10:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
-elif BVP_NO == 11:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
-elif BVP_NO == 12:
-    loss_class = CustomLoss(bvp=my_bvp, gamma=10, bar_approach=BAR_APPROACH)
+# Loss class
+loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-NO_TRAINING_POINTS = 50
+NO_TRAINING_POINTS = 20
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], NO_TRAINING_POINTS)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
