@@ -8,10 +8,12 @@ import matplotlib.pyplot as plt
 # Enable LaTeX rendering
 
 plt.rcParams.update({
-    'font.size': 12,
+    'font.size': 11,
     "text.usetex": True,
     "font.family": "serif"
 })
+
+plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 3)
@@ -288,7 +290,12 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
     num_equations = y_pred_numpy.shape[1]
     
     # Set up the figure with multiple subplots
-    fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
+    if num_equations == 1:
+        fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
+    elif num_equations == 2:
+        fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
+    elif num_equations == 3:
+        fig, axes = plt.subplots(num_equations, 1, figsize=(FIGSIZE[0], 5))
     
     if num_equations == 1:
         axes = [axes]  # make it iterable if only one plot
@@ -299,8 +306,8 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
             label_nn = f'NN'
             label_exact = f'Exact'
         else:
-            label_nn = f'NN (Eq. {i+1})'
-            label_exact = f'Exact (Eq. {i + 1})'
+            label_nn = f'\(y_{i+1}\), NN'
+            label_exact = f'\(y_{i+1}\), Exact'
         if eval_nn_at_train:
             axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o')
         else:
@@ -353,8 +360,9 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
 ####################################################################################################
 
 
-BVP_NO = 2
+BVP_NO = 13
 BAR_APPROACH = True
+SHISHKIN = True
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -383,7 +391,9 @@ if BVP_NO == 0:
     gamma = 1.5
 elif BVP_NO == 1:
     # BVP with boundary layer solution
-    eps = 0.015
+    
+    eps = 0.03
+    C_sigma = 2
 
     def eqn1(x, y, y_x, y_xx):
         return torch.squeeze(eps * torch.squeeze(y_xx[:,0]) - torch.squeeze(y_x[:,0]) + 1)
@@ -398,7 +408,7 @@ elif BVP_NO == 1:
     exact_sol = lambda x: np.array([x + (np.exp(- (1 - x) / eps) - np.exp(- 1 / eps)) / (np.exp(-1 / eps) - 1)])
     
     no_epochs = 12000
-    learning_rate = 0.05
+    learning_rate = 0.01
 
     gamma = 1.5
 elif BVP_NO == 2:
@@ -625,6 +635,37 @@ elif BVP_NO == 12:
     # LBFGS, 150 POINTS, 1500 EPOCHS, LEARNING RATE 0.004. OFTEN SEEMS STUCK ON A BAD LOCAL MINIMUM, BUT THIS COMBO GETS OVER THAT.
     # AS GENERAL ISSUE WITH GAMMA, SEEMS TO BE A PROBLEM OF: IF BOUNDARIES ARE A BIT OFF,
     # WHOLE FIT CAN LOOK OFF EVEN WITH VERY LOW LOSS VALUES (PROPAGATION OF THE WRONGNESS WHICH THE ODE CANNOT "UNDO").
+elif BVP_NO == 13:
+    # proof of concept for systems solver. UNCOUPLED equations
+    domain_ends = (0, 2 * np.pi)
+    bcs = (
+        (('d', 1), ('d', 1)),
+        (('d', -1), ('d', -1)),
+        (('d', 1), ('d', 1))
+    )
+
+    def eqn1(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,0]) - torch.squeeze(y[:,1])
+
+    def eqn2(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,1]) - torch.squeeze(y[:,2])
+    
+    def eqn3(x, y, y_x, y_xx):
+        return torch.squeeze(y_xx[:,2]) + torch.squeeze(y[:,0])
+    
+    ODE_funcs = [eqn1,
+                 eqn2,
+                 eqn3]
+
+    def exact_sol(x):
+        return np.array([np.cos(x),
+                         - np.cos(x),
+                         np.cos(x)])
+
+    no_epochs = 1500
+    learning_rate = 0.006
+
+    gamma = 10
 
 
 # Define BVP (routine)
@@ -639,7 +680,16 @@ loss_class = CustomLoss(bvp=my_bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
 NO_TRAINING_POINTS = 50
-training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], NO_TRAINING_POINTS)
+# Shishkin mesh for boundary-layer problem
+if BVP_NO == 1:
+    sigma = eps * C_sigma * np.log(NO_TRAINING_POINTS)
+    left_submesh  = np.linspace(0, 1 - sigma, int(np.floor(NO_TRAINING_POINTS/2)))
+    right_submesh = np.linspace(1 - sigma, 1, int( np.ceil(NO_TRAINING_POINTS/2)))
+    shishkin_mesh = np.concatenate((left_submesh, right_submesh))
+    training_points = shishkin_mesh
+else:
+    training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], NO_TRAINING_POINTS)
+
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
 # MODEL
