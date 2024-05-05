@@ -295,18 +295,24 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
     
     # Plot predictions for each equation
     for i in range(num_equations):
-        if eval_nn_at_train:
-            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=f'NN Predictions (Eq. {i+1})', color='r', linestyle='--', marker='o')
+        if num_equations == 1:
+            label_nn = f'NN'
+            label_exact = f'Exact'
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=f'NN Predictions (Eq. {i+1})', color='r', linestyle='--', marker='o')
+            label_nn = f'NN (Eq. {i+1})'
+            label_exact = f'Exact (Eq. {i + 1})'
+        if eval_nn_at_train:
+            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o')
+        else:
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', marker='o')
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
-            axes[i].plot(x_eval_numpy, y_exact_numpy, label=f'Analytical Solution (Eq. {i+1})', color='b', linestyle='-')
+            axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-')
         
         axes[i].set_xlabel('x')
         axes[i].set_ylabel('y')
         axes[i].legend()
-        axes[i].set_title(f'NN Predictions vs Exact Solution (Eq {i+1})')
+        # axes[i].set_title(f'NN Predictions vs Exact Solution (Eq {i+1})')
 
     plt.tight_layout()
     plt.show()
@@ -347,7 +353,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
 ####################################################################################################
 
 
-BVP_NO = 1
+BVP_NO = 2
 BAR_APPROACH = True
 
 if BVP_NO == 0:
@@ -409,11 +415,12 @@ elif BVP_NO == 2:
     
     exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
     
-    no_epochs = 30000
+    no_epochs = 15000
     learning_rate = 0.0025
 
     gamma = 200
 elif BVP_NO == 3:
+    # Bit of a useless example at this point. ""Keeping it"" for naming stability only.
     alphas = (1, 0, 0)
     ns = (1, 0, 0)
     domain_ends = (0, 10)
@@ -628,10 +635,10 @@ my_bvp = BVP(
 )
 
 # Loss class
-loss_class = CustomLoss(bvp=my_bvp, gamma=1.5, bar_approach=BAR_APPROACH)
+loss_class = CustomLoss(bvp=my_bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-NO_TRAINING_POINTS = 20
+NO_TRAINING_POINTS = 50
 training_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], NO_TRAINING_POINTS)
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
