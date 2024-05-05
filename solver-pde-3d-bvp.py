@@ -236,6 +236,16 @@ def plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_so
     mlab.show()
 
 def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train=False, exact_sol_func=None):
+    # Formatting specs
+    pv_font_size = 10
+    pv_font_family = 'times' # times, arial, courier
+    pv_bar_width = 0.5
+    pv_bar_position_x = (1 - pv_bar_width) / 2
+    pv_n_labels = 5
+    pv_title_position = 'upper_edge'
+    pv_title_font_size = 12
+    scalar_bar_dict = {'title': '', 'width': pv_bar_width, 'position_x': pv_bar_position_x, 'label_font_size': pv_font_size, 'font_family': pv_font_family, 'n_labels': pv_n_labels, 'use_opacity': False, 'vertical': False}
+
     xyz_eval_numpy = xyz_eval.detach().numpy()
     grid_dim = int(np.cbrt(xyz_eval_numpy.shape[0]))
     x_eval, y_eval, z_eval = np.meshgrid(
@@ -252,45 +262,28 @@ def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train
 
     u_pred_numpy = u_pred_tensor.detach().numpy().reshape(grid_dim, grid_dim, grid_dim)
 
-    # Setup the ImageData grid
+    # Setup the ImageData grid for NN prediction
     grid = pv.ImageData(spacing=(1 / (grid_dim - 1), 1 / (grid_dim - 1), 1 / (grid_dim - 1)),
                         origin=(0, 0, 0), dimensions=(grid_dim, grid_dim, grid_dim))
     grid.point_data['values'] = u_pred_numpy.flatten(order='F')  # Assign values to the grid points
 
-    # Setup plotter
-    plotter = pv.Plotter(shape=(1, 2), window_size=(96*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
-    plotter.subplot(0, 0)
-
-    # Formatting options
-    pv_font_size = 10
-    pv_font_family = 'times' # times, arial, courier
-    pv_bar_width = 0.5
-    pv_bar_position_x = (1 - pv_bar_width) / 2
-    pv_n_labels = 5
-    pv_title_position = 'upper_edge'
-    pv_title_font_size = 12
-    scalar_bar_dict = {'title': 'u(x, y, z)', 'width': pv_bar_width, 'position_x':pv_bar_position_x, 'label_font_size': pv_font_size, 'font_family': pv_font_family, 'n_labels': pv_n_labels, 'use_opacity': False}
-
-    # Add volume to the plotter
-
-    plotter.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
-    # plotter.add_scalar_bar(title="", label_font_size=10, title_font_size=10, width=0.5)
-    plotter.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+    # Setup plotter for NN prediction
+    plotter_nn = pv.Plotter(window_size=(48*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
+    plotter_nn.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
+    plotter_nn.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+    plotter_nn.show()
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(grid_dim, grid_dim, grid_dim)
         grid_exact = pv.ImageData(spacing=(1 / (grid_dim - 1), 1 / (grid_dim - 1), 1 / (grid_dim - 1)),
                                   origin=(0, 0, 0), dimensions=(grid_dim, grid_dim, grid_dim))
-        grid_exact.point_data['values'] = u_exact_numpy.flatten(order='F')  # Assign values to the grid points
+        grid_exact.point_data['values'] = u_exact_numpy.flatten(order='F')
 
-        plotter.subplot(0, 1)
-        plotter.add_volume(grid_exact, scalars='values', cmap='inferno', opacity=opacity_str)
-        plotter.add_scalar_bar(title="u(x, y, z)", font_family=pv_font_family, label_font_size=pv_font_size, width=pv_bar_width, position_x=pv_bar_position_x, n_labels=pv_n_labels, use_opacity=False)
-
-        plotter.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
-
-
-    plotter.show()
+        # Setup plotter for exact solution
+        plotter_exact = pv.Plotter(window_size=(48*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
+        plotter_exact.add_volume(grid_exact, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
+        plotter_exact.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+        plotter_exact.show()
 
 def plot_isosurface_pyvista(model, xyz_eval, level, exact_sol_func=None):
     # Ensure the input tensor does not require gradient computation
