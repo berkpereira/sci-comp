@@ -293,8 +293,8 @@ def uniform_mesh(domain_bounds, x_points, t_points):
 ####################################################################################################
 ####################################################################################################
 
-IVP_NO = 2
-BAR_APPROACH = False
+IVP_NO = 3
+BAR_APPROACH = True
 
 if IVP_NO == 0:
     # Heat equation, TRIVIAL
@@ -325,7 +325,7 @@ if IVP_NO == 0:
 
     gamma=10
 elif IVP_NO == 1:
-        # Heat equation
+    # Heat equation
     alpha = 1
     def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
         return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
@@ -345,7 +345,6 @@ elif IVP_NO == 1:
         return torch.sin(np.pi * torch.squeeze(xt[:,0]))
 
     def exact_sol(xt):
-        # Since the boundary conditions and the PDE suggest a trivial solution:
         return np.exp(- np.pi**2 * xt[:,1]) * np.sin(np.pi * xt[:,0])
 
     no_epochs = 3000
@@ -374,11 +373,56 @@ elif IVP_NO == 2:
         return torch.sin(np.pi * xt[:,0]) + 0.5 * torch.sin(3 * np.pi * xt[:,0])
 
     def exact_sol(xt):
-        # Since the boundary conditions and the PDE suggest a trivial solution:
         return np.exp(- np.pi**2 * xt[:,1]) * np.sin(np.pi * xt[:,0]) + 0.5 * np.exp(- 9 * np.pi**2 * xt[:,1]) * np.sin(3 * np.pi * xt[:,0])
 
     no_epochs = 10000
     learning_rate = 0.004
+
+    gamma=5
+elif IVP_NO == 3:
+    # Heat equation, sawtooth wave
+    alpha = 1
+    N = 3 # must be positive integer
+
+    def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
+        return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
+
+    def boundary_east(t):
+        return 0.0
+    def boundary_west(t):
+        return 0.0
+    def boundary_south(x):
+        n = torch.arange(1, N+1, dtype=torch.float32)  # Create a tensor for n values from 1 to N
+        n = n.view(1, -1)  # Reshape for broadcasting (1, N)
+        sin_terms = torch.sin(n * np.pi * x.view(-1, 1))  # Shape (batch_size, N)
+        output = torch.sum((1.0 / n) * sin_terms, dim=1)
+        return output
+
+    # Domain bounds
+    domain_bounds = {'x': (0, 1), 't': (0, 0.1)}
+
+    # Function satisfying boundary conditions, for BAR APPROACH
+    def g_func(xt):
+        return boundary_south(xt[:,0])
+
+    def exact_sol(xt):
+        x = xt[:, 0]
+        t = xt[:, 1]
+        
+        n = np.arange(1, N + 1)  # Array of n values from 1 to N
+        n = n.reshape(1, -1)  # Reshape for broadcasting (1, N)
+        
+        # Calculate the terms of the series
+        sin_terms = np.sin(n * np.pi * x.reshape(-1, 1))  # Shape (num_samples, N)
+        decay_factors = np.exp(-n**2 * np.pi**2 * alpha * t.reshape(-1, 1))  # Shape (num_samples, N)
+        
+        # Weighted sum of terms (weights could be 1/n or any specific sequence depending on the problem)
+        result = np.sum((1.0 / n) * decay_factors * sin_terms, axis=1)  # Sum along the second dimension
+        
+        return result
+
+    no_epochs = 30000
+    learning_rate = 0.01
 
     gamma=5
 
@@ -410,7 +454,7 @@ optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 loss_class = CustomLoss(ivp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-xt_train = uniform_mesh(domain_bounds, 30, 20)
+xt_train = uniform_mesh(domain_bounds, 50, 20)
 # xy_train = random_mesh(domain_bounds, 1000, 50, 50)
 xt_eval  = uniform_mesh(domain_bounds, 50, 50)
 
