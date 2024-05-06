@@ -362,7 +362,15 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
 
 BVP_NO = 13
 BAR_APPROACH = True
-SHISHKIN = True
+OPTIMISER_NAME = 'adam' # adam, lbfgs
+SHISHKIN = True # for boundary layer problem
+
+NO_TRAINING_POINTS = 50
+
+ANN_width = 50
+ANN_depth = 1
+
+SAVE_FIGURE = False
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -667,6 +675,11 @@ elif BVP_NO == 13:
 
     gamma = 10
 
+# INFORMATIVE FILE NAME FOR SAVING
+file_name = f'problem{str(BVP_NO)}-depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}'
+
+# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
+base_plot_path = plot_file_base + file_name
 
 # Define BVP (routine)
 my_bvp = BVP(
@@ -679,7 +692,6 @@ my_bvp = BVP(
 loss_class = CustomLoss(bvp=my_bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-NO_TRAINING_POINTS = 50
 # Shishkin mesh for boundary-layer problem
 if BVP_NO == 1:
     sigma = eps * C_sigma * np.log(NO_TRAINING_POINTS)
@@ -692,17 +704,16 @@ else:
 
 x_train = torch.tensor(training_points).reshape(len(training_points), 1).to(torch.float32).requires_grad_(True)
 
-# MODEL
-ANN_width = 50
-ANN_depth = 1
-
 output_features = my_bvp.dim
 input_features = 1
 
 model = NeuralNetwork(my_bvp, input_features, output_features, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
 
 # OPTIMISER
-optimiser = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+if OPTIMISER_NAME == 'lbfgs':
+    optimiser = torch.optim.LBFGS(params=model.parameters(), lr=learning_rate)
+elif OPTIMISER_NAME == 'adam':
+    optimiser = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
 
 # Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)

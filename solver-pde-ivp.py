@@ -7,10 +7,12 @@ from mpl_toolkits.mplot3d import Axes3D
 # Enable LaTeX rendering
 
 plt.rcParams.update({
-    'font.size': 12,
+    'font.size': 11,
     "text.usetex": True,
     "font.family": "serif"
 })
+
+plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/ivp-2d-'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 8)
@@ -295,6 +297,14 @@ def uniform_mesh(domain_bounds, x_points, t_points):
 
 IVP_NO = 3
 BAR_APPROACH = True
+OPTIMISER_NAME = 'adam' # adam, lbfgs
+NO_POINTS_DIR = 25
+MESH_TYPE = 'uniform' # uniform, random
+
+hidden_units = 50
+depth = 1
+
+SAVE_FIGURE = False
 
 if IVP_NO == 0:
     # Heat equation, TRIVIAL
@@ -384,6 +394,9 @@ elif IVP_NO == 3:
     alpha = 1
     N = 3 # must be positive integer
 
+    # works decently well with alpha = 1, N = 3 (weak...), Adam, lr = 0.01, 30,000 epochs, 50 points in x, 20 in t (from 0 to 0.1),
+    # 50 wide, 1 deep
+
     def PDE_func(xt, u, u_x, u_t, u_xx, u_tt):
         return torch.squeeze(u_t) - alpha * torch.squeeze(u_xx)
 
@@ -426,6 +439,12 @@ elif IVP_NO == 3:
 
     gamma=5
 
+# INFORMATIVE FILE NAME FOR SAVING
+file_name = f'problem{str(IVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
+
+# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
+base_plot_path = plot_file_base + file_name
+
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
@@ -440,22 +459,24 @@ bcs = {
 # IVP instance
 ivp = IVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
 
-# Neural network parameters
-hidden_units = 50
-depth = 1
-
 # Create the neural network
 model = NeuralNetwork2D(ivp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
-optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+if OPTIMISER_NAME == 'adam':
+    optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+elif OPTIMISER_NAME == 'lbfgs':
+    optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
 
 # Loss class instance
 loss_class = CustomLoss(ivp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-xt_train = uniform_mesh(domain_bounds, 50, 20)
-# xy_train = random_mesh(domain_bounds, 1000, 50, 50)
+if MESH_TYPE == 'uniform':
+    xt_train = uniform_mesh(domain_bounds, NO_POINTS_DIR, NO_POINTS_DIR)
+elif MESH_TYPE == 'random':
+    xy_train = random_mesh(domain_bounds, NO_POINTS_DIR, 50, 50)
+
 xt_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model

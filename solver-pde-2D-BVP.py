@@ -7,10 +7,12 @@ from mpl_toolkits.mplot3d import Axes3D
 # Enable LaTeX rendering
 
 plt.rcParams.update({
-    'font.size': 12,
+    'font.size': 11,
     "text.usetex": True,
     "font.family": "serif"
 })
+
+plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d-'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (10, 8)
@@ -172,7 +174,7 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
     u_pred_reshaped = u_pred_numpy.reshape(num_points_per_dim, num_points_per_dim)
 
     # Plotting
-    fig, axs = plt.subplots(1, 2, figsize=(18, 8), subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
+    fig, axs = plt.subplots(1, 2, figsize=FIGSIZE, subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
     
     if plot_type == 'surface':
         surf = axs[0].plot_surface(x, y, u_pred_reshaped, cmap='viridis', edgecolor='none')
@@ -243,7 +245,7 @@ def plot_pde_residuals(model, bvp, xy_train_tensor):
     residuals_reshaped = residuals.reshape(num_points_per_dim, num_points_per_dim)
 
     # Plotting
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=FIGSIZE)
     contour = plt.contourf(x, y, residuals_reshaped, cmap='viridis')
     plt.colorbar(contour)
     plt.title('PDE Residuals (abs) Across the Domain')
@@ -294,21 +296,29 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 4
+BVP_NO = 0
 BAR_APPROACH = True
+OPTIMISER_NAME = 'adam' # adam, lbfgs
+NO_POINTS_DIR = 50
+MESH_TYPE = 'uniform' # uniform, random
+
+hidden_units = 50
+depth = 1
+
+SAVE_FIGURE = False
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
     def PDE_func(xy, u, u_x, u_y, u_xx, u_yy):
-        return u_xx + u_yy
+        return torch.squeeze(u_xx + u_yy)
 
-    def boundary_east(x):
+    def boundary_east(y):
         return 0.0
-    def boundary_west(x):
+    def boundary_west(y):
         return 0.0
-    def boundary_north(y):
+    def boundary_north(x):
         return 0.0
-    def boundary_south(y):
+    def boundary_south(x):
         return 0.0 
 
     # Domain bounds
@@ -477,26 +487,25 @@ if BVP_NO == 5:
 
     gamma = 100
 
+# INFORMATIVE FILE NAME FOR SAVING
+file_name = f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
+
+# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
+base_plot_path = plot_file_base + file_name
+
 # Boundary conditions dictionary
 bcs = {
-    'east': boundary_east,
+    'east':  boundary_east,
     'north': boundary_north,
-    'west': boundary_west,
+    'west':  boundary_west,
     'south': boundary_south
 }
 
 # BVP instance
 bvp = BVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_func)
 
-# Neural network parameters
-input_features = 2
-output_features = 1
-
-hidden_units = 50
-depth = 1
-
 # Create the neural network
-model = NeuralNetwork2D(bvp, input_features=2, output_features=1, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
+model = NeuralNetwork2D(bvp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
 # Optimizer
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -505,8 +514,11 @@ optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
 loss_class = CustomLoss(bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # GENERATE MESHES
-xy_train = uniform_mesh(domain_bounds, 50, 50)
-# xy_train = random_mesh(domain_bounds, 1000, 50, 50)
+if MESH_TYPE == 'uniform':
+    xy_train = uniform_mesh(domain_bounds, NO_POINTS_DIR, NO_POINTS_DIR)
+elif MESH_TYPE == 'random':
+    xy_train = random_mesh(domain_bounds, NO_POINTS_DIR, 50, 50)
+
 xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
