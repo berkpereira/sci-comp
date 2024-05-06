@@ -551,7 +551,7 @@ if MESH_TYPE == 'uniform':
 elif MESH_TYPE == 'random':
     xy_train = random_mesh(domain_bounds, NO_POINTS_DIR, 50, 50)
 
-xy_eval  = uniform_mesh(domain_bounds, 50, 50)
+xy_eval = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs)
