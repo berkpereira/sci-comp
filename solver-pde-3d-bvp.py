@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+import pyvista as pv
 
 # Enable LaTeX rendering
 
@@ -11,10 +12,10 @@ plt.rcParams.update({
     "font.family": "serif"
 })
 
-plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d-'
+plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d-'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 4)
+FIGSIZE = (6, 3)
 
 torch.manual_seed(42)
 
@@ -235,15 +236,15 @@ def plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_so
 
     mlab.show()
 
-def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train=False, exact_sol_func=None, save_fig=False):
+def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train=False, exact_sol_func=None, savefig=False, plot_path=plot_path, scale_image: int = 1):
     # Formatting specs
-    pv_font_size = 10
+    pv_font_size = scale_image * 10
     pv_font_family = 'times' # times, arial, courier
     pv_bar_width = 0.5
     pv_bar_position_x = (1 - pv_bar_width) / 2
     pv_n_labels = 5
     pv_title_position = 'upper_edge'
-    pv_title_font_size = 12
+    pv_title_font_size = scale_image * 12
     scalar_bar_dict = {'title': '', 'width': pv_bar_width, 'position_x': pv_bar_position_x, 'label_font_size': pv_font_size, 'font_family': pv_font_family, 'n_labels': pv_n_labels, 'use_opacity': False, 'vertical': False}
 
     xyz_eval_numpy = xyz_eval.detach().numpy()
@@ -267,11 +268,16 @@ def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train
                         origin=(0, 0, 0), dimensions=(grid_dim, grid_dim, grid_dim))
     grid.point_data['values'] = u_pred_numpy.flatten(order='F')  # Assign values to the grid points
 
-    # Setup plotter for NN prediction
-    plotter_nn = pv.Plotter(window_size=(48*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
+    # Set up plotter for NN prediction
+    plotter_nn = pv.Plotter(window_size=(scale_image * 48 * FIGSIZE[0], scale_image * 96 * FIGSIZE[1])) # sizes in pixels
     plotter_nn.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
-    plotter_nn.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
-    plotter_nn.show()
+    # plotter_nn.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+
+    if savefig:
+        screenshot_path = plot_path + 'volume-nn.png'
+        plotter_nn.show(screenshot=screenshot_path)
+    else:
+        plotter_nn.show()
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xyz_eval_numpy).reshape(grid_dim, grid_dim, grid_dim)
@@ -280,10 +286,15 @@ def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train
         grid_exact.point_data['values'] = u_exact_numpy.flatten(order='F')
 
         # Setup plotter for exact solution
-        plotter_exact = pv.Plotter(window_size=(48*FIGSIZE[0], 96*FIGSIZE[1])) # sizes in pixels
+        plotter_exact = pv.Plotter(window_size=(scale_image * 48 * FIGSIZE[0], scale_image* 96 * FIGSIZE[1])) # sizes in pixels
         plotter_exact.add_volume(grid_exact, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
-        plotter_exact.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
-        plotter_exact.show()
+        # plotter_exact.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
+
+        if savefig:
+            screenshot_path = plot_path + 'volume-exact.png'
+            plotter_exact.show(screenshot=screenshot_path)
+        else:
+            plotter_exact.show()
 
 def plot_isosurface_pyvista(model, xyz_eval, level, exact_sol_func=None):
     # Ensure the input tensor does not require gradient computation
@@ -431,7 +442,8 @@ MESH_TYPE = 'uniform' # uniform, random
 hidden_units = 50
 depth = 1
 
-SAVE_FIGURE = False
+SAVE_FIGURE = True
+SCALE_IMAGE = 6
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
@@ -634,10 +646,8 @@ if BVP_NO == 5:
     gamma = 100
 
 # INFORMATIVE FILE NAME FOR SAVING
-file_name = f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
+plot_path = plot_path + f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
 
-# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
-base_plot_path = plot_file_base + file_name
 
 # Boundary conditions dictionary
 bcs = {
@@ -684,6 +694,5 @@ loss_values = train_model(model, optimiser, bvp, loss_class, xyz_train, no_epoch
 # plot_isosurface_mlab(model, xyz_eval, level=level, exact_sol_func=exact_sol)
 # plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol)
 
-import pyvista as pv
 # plot_isosurface_pyvista(model, xyz_eval, level=[0.2, 0.5], exact_sol_func=exact_sol)
-plot_volume_rendering_pyvista(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, opacity_str=opacity_str, save_fig=SAVE_FIGURE)
+plot_volume_rendering_pyvista(model, xyz_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, opacity_str=opacity_str, savefig=SAVE_FIGURE, plot_path=plot_path, scale_image=SCALE_IMAGE)
