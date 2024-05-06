@@ -265,10 +265,10 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
 
 def plot_loss_vs_epoch(loss_values, savefig=False, plot_path=None):
     plt.figure(figsize=FIGSIZE)
-    plt.plot(loss_values, label='Training Loss', color='blue')
+    plt.plot(loss_values, color='blue')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Loss vs. Epoch')
+    # plt.title('Loss vs Epoch')
     plt.yscale('log')  # Set the y-axis to logarithmic scale
     plt.legend()
     plt.tight_layout()
@@ -343,40 +343,45 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     # Convert the training tensor to numpy for x-axis plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
     
-    
     # Predictions from the neural network
-
     y_pred = model(x_train_tensor)
-
-    # y_pred_numpy = y_pred.detach().numpy().flatten()
+    y_pred.requires_grad_(True)
 
     # Compute derivatives
-    y_pred.requires_grad_(True)
-    y_x = torch.autograd.grad(y_pred, x_train_tensor, torch.ones_like(y_pred), create_graph=True)[0]
-    y_xx = torch.autograd.grad(y_x, x_train_tensor, torch.ones_like(y_x), create_graph=True)[0]
+    y_x = torch.zeros_like(y_pred)
+    y_xx = torch.zeros_like(y_pred)
+    for i in range(y_pred.shape[1]):
+        y_x[:, i:i+1] = torch.autograd.grad(y_pred[:, i], x_train_tensor, torch.ones_like(y_pred[:, i]), create_graph=True, allow_unused=True)[0]
+        y_xx[:, i:i+1] = torch.autograd.grad(y_x[:, i], x_train_tensor, torch.ones_like(y_x[:, i]), create_graph=True, allow_unused=True)[0]
     
     # Evaluate the ODE residuals
-    residuals = np.abs(bvp.eval_ode(x_train_tensor, y_pred, y_x, y_xx).detach().numpy().flatten())
-    
+    residuals = bvp.eval_ode(x_train_tensor, y_pred, y_x, y_xx).detach().numpy()
+
     # Plotting
-    plt.figure(figsize=FIGSIZE)
-    plt.plot(x_train_numpy, residuals, label='ODE Residuals', color='blue', linestyle='-.')
-    plt.axhline(0, color='black', lw=1)  # Zero line for reference
-    plt.xlabel('x')
-    plt.ylabel('Residual (abs value)')
-    plt.yscale('log')
-    plt.title('ODE Residuals Across the Domain')
-    plt.legend()
+    num_equations = residuals.shape[1]
+    fig, axes = plt.subplots(figsize=FIGSIZE)
+    colours = ['blue', 'red', 'black', 'cyan', 'magenta', 'yellow'] # add more if having more ODEs
+
+    if num_equations == 1:
+        axes = [axes]  # make it iterable if only one plot
+    
+    for i in range(num_equations):
+        axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
+    axes.set_xlabel('x')
+    axes.set_ylabel('Residual (abs. value)')
+    axes.set_yscale('log')
+    # axes.set_title(f'Residuals for Equation {i+1}')
+    axes.legend()
+
     plt.tight_layout()
 
     if savefig:
         if plot_path is None:
             raise Exception('Must provide parent directory for figure file!')
-        plot_path = plot_path + 'residuals.pdf'
-        plt.savefig(plot_path)
+        plot_path_modified = plot_path + 'residuals.pdf'
+        plt.savefig(plot_path_modified)
 
     plt.show()
-
 
 ####################################################################################################
 ####################################################################################################
