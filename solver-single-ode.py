@@ -6,7 +6,7 @@ from torch import nn
 import matplotlib.pyplot as plt
 # Enable LaTeX rendering
 plt.rcParams.update({
-    'font.size': 12,
+    'font.size': 11,
     "text.usetex": True,
     "font.family": "serif"
 })
@@ -262,7 +262,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
 """
 ENTERING RELEVANT PARAMETERS
 """
-BVP_NO = 1
+BVP_NO = 2
 BAR_APPROACH = True
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -294,13 +294,14 @@ elif BVP_NO == 1:
     no_epochs = 12000
     learning_rate = 0.0075
 elif BVP_NO == 2:
-    alphas = (64, 0, 1)
-    ns = (1, 1, 1)
-    # Right domain end is about x = 2.55
+    def ODE_func(x, y, y_x, y_xx):
+        return 64 * y + torch.squeeze(y_xx)
+    
     domain_ends = (0, 9 * np.pi / 16)
-    bcs = (1, 0) # DIRICHLET
-    g_func = lambda x: 0
-    exact_sol = lambda x: np.cos(8 * x) # UNIQUE solution
+    bcs = {'a':('dirichlet', 1),
+           'b':('dirichlet', 0)}
+    
+    exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
     
     no_epochs = 50000
     learning_rate = 0.0025
