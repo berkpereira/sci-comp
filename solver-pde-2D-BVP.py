@@ -12,10 +12,10 @@ plt.rcParams.update({
     "font.family": "serif"
 })
 
-plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d-'
+plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d-'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (10, 8)
+FIGSIZE = (6, 4)
 
 torch.manual_seed(42)
 
@@ -153,7 +153,7 @@ def train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface'):
+def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
     # Convert the evaluation tensor to numpy for plotting
     xy_eval_numpy = xy_eval_tensor.detach().numpy()
     
@@ -178,14 +178,14 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
     
     if plot_type == 'surface':
         surf = axs[0].plot_surface(x, y, u_pred_reshaped, cmap='viridis', edgecolor='none')
-        axs[0].set_title('Neural Network Predictions')
+        # axs[0].set_title('Neural Network Predictions')
         axs[0].set_xlabel('x')
         axs[0].set_ylabel('y')
         axs[0].set_zlabel('u')
         fig.colorbar(surf, ax=axs[0], shrink=0.5, aspect=5)
     elif plot_type == 'contour':
         contour = axs[0].contourf(x, y, u_pred_reshaped, cmap='viridis', levels=50)
-        axs[0].set_title('Neural Network Predictions')
+        # axs[0].set_title('Neural Network Predictions')
         axs[0].set_xlabel('x')
         axs[0].set_ylabel('y')
         fig.colorbar(contour, ax=axs[0], shrink=0.5, aspect=5)
@@ -194,34 +194,53 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
         u_exact_numpy = exact_sol_func(xy_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
         if plot_type == 'surface':
             surf = axs[1].plot_surface(x, y, u_exact_numpy, cmap='viridis', edgecolor='none')
-            axs[1].set_title('Exact Solution')
+            # axs[1].set_title('Exact Solution')
             axs[1].set_xlabel('x')
             axs[1].set_ylabel('y')
             axs[1].set_zlabel('u')
             fig.colorbar(surf, ax=axs[1], shrink=0.5, aspect=5)
         elif plot_type == 'contour':
             contour = axs[1].contourf(x, y, u_exact_numpy, cmap='viridis', levels=50)
-            axs[1].set_title('Exact Solution')
+            # axs[1].set_title('Exact Solution')
             axs[1].set_xlabel('x')
             axs[1].set_ylabel('y')
             fig.colorbar(contour, ax=axs[1], shrink=0.5, aspect=5)
-    else:
-        axs[1].set_title('No exact solution provided')
 
     plt.tight_layout()
+
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        if plot_type == 'contour':
+            plot_path = plot_path + 'sols-contour.pdf'
+        elif plot_type == 'surface':
+            plot_path = plot_path + 'sols-surface.pdf'
+        else:
+            raise Exception('Unrecognised plot type!')
+        
+        plt.savefig(plot_path)
+
     plt.show()
 
-def plot_loss_vs_epoch(loss_values):
+def plot_loss_vs_epoch(loss_values, savefig=False, plot_path=None):
     plt.figure(figsize=FIGSIZE)
-    plt.plot(loss_values, label='Training Loss', color='blue')
+    plt.plot(loss_values, color='blue')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Loss vs. Epoch')
+    # plt.title('Loss vs. Epoch')
     plt.yscale('log')  # Set the y-axis to logarithmic scale
     plt.legend()
+    plt.tight_layout()
+
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        plot_path = plot_path + 'loss-epoch.pdf'
+        plt.savefig(plot_path)
+
     plt.show()
 
-def plot_pde_residuals(model, bvp, xy_train_tensor):
+def plot_pde_residuals(model, bvp, xy_train_tensor, savefig=False, plot_path=None):
     # Predictions from the neural network
     u_pred = model(xy_train_tensor)
 
@@ -248,9 +267,17 @@ def plot_pde_residuals(model, bvp, xy_train_tensor):
     plt.figure(figsize=FIGSIZE)
     contour = plt.contourf(x, y, residuals_reshaped, cmap='viridis')
     plt.colorbar(contour)
-    plt.title('PDE Residuals (abs) Across the Domain')
+    # plt.title('Residual (abs) Across the Domain')
     plt.xlabel('x')
     plt.ylabel('y')
+    plt.tight_layout()
+
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        plot_path_modified = plot_path + 'residuals.pdf'
+        plt.savefig(plot_path_modified)
+
     plt.show()
 
 # MESH GENERATION
@@ -305,7 +332,7 @@ MESH_TYPE = 'uniform' # uniform, random
 hidden_units = 50
 depth = 1
 
-SAVE_FIGURE = False
+SAVE_FIGURE = True
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
@@ -488,10 +515,7 @@ if BVP_NO == 5:
     gamma = 100
 
 # INFORMATIVE FILE NAME FOR SAVING
-file_name = f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
-
-# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
-base_plot_path = plot_file_base + file_name
+plot_path = plot_path + f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
 
 # Boundary conditions dictionary
 bcs = {
@@ -525,7 +549,7 @@ xy_eval  = uniform_mesh(domain_bounds, 50, 50)
 loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs)
 
 # PLOTTING
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface')
-# plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour')
-plot_loss_vs_epoch(loss_values)
-plot_pde_residuals(model, bvp, xy_train)
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_pde_residuals(model, bvp, xy_train, savefig=SAVE_FIGURE, plot_path=plot_path)
