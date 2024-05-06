@@ -13,7 +13,7 @@ plt.rcParams.update({
     "font.family": "serif"
 })
 
-plot_file_base = '~/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
+plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 3)
@@ -263,7 +263,7 @@ def train_model(model, optimiser, bvp, loss_class, x_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-def plot_loss_vs_epoch(loss_values):
+def plot_loss_vs_epoch(loss_values, savefig=False, plot_path=None):
     plt.figure(figsize=FIGSIZE)
     plt.plot(loss_values, label='Training Loss', color='blue')
     plt.xlabel('Epoch')
@@ -271,9 +271,17 @@ def plot_loss_vs_epoch(loss_values):
     plt.title('Loss vs. Epoch')
     plt.yscale('log')  # Set the y-axis to logarithmic scale
     plt.legend()
+    plt.tight_layout()
+    
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        plot_path = plot_path + 'loss-epoch.pdf'
+        plt.savefig(plot_path)
+    
     plt.show()
 
-def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True, exact_sol_func=None):
+def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, savefig=False, plot_path=None):
     # Convert the training tensor to numpy for plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
     x_eval_numpy  = x_eval_tensor.detach().numpy().flatten()
@@ -322,9 +330,16 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
         # axes[i].set_title(f'NN Predictions vs Exact Solution (Eq {i+1})')
 
     plt.tight_layout()
+
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        plot_path = plot_path + 'sols.pdf'
+        plt.savefig(plot_path)
+        
     plt.show()
 
-def plot_ode_residuals(model, bvp, x_train_tensor):
+def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None):
     # Convert the training tensor to numpy for x-axis plotting
     x_train_numpy = x_train_tensor.detach().numpy().flatten()
     
@@ -352,6 +367,14 @@ def plot_ode_residuals(model, bvp, x_train_tensor):
     plt.yscale('log')
     plt.title('ODE Residuals Across the Domain')
     plt.legend()
+    plt.tight_layout()
+
+    if savefig:
+        if plot_path is None:
+            raise Exception('Must provide parent directory for figure file!')
+        plot_path = plot_path + 'residuals.pdf'
+        plt.savefig(plot_path)
+
     plt.show()
 
 
@@ -370,7 +393,7 @@ NO_TRAINING_POINTS = 50
 ANN_width = 50
 ANN_depth = 1
 
-SAVE_FIGURE = False
+SAVE_FIGURE = True
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -676,10 +699,7 @@ elif BVP_NO == 13:
     gamma = 10
 
 # INFORMATIVE FILE NAME FOR SAVING
-file_name = f'problem{str(BVP_NO)}-depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}'
-
-# STILL NEED TO APPEND TYPE OF PLOT TO THE END OF THIS STRING!
-base_plot_path = plot_file_base + file_name
+plot_path = plot_path + f'problem{str(BVP_NO)}-depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}-'
 
 # Define BVP (routine)
 my_bvp = BVP(
@@ -692,8 +712,8 @@ my_bvp = BVP(
 loss_class = CustomLoss(bvp=my_bvp, gamma=gamma, bar_approach=BAR_APPROACH)
 
 # TRAINING POINTS
-# Shishkin mesh for boundary-layer problem
-if BVP_NO == 1:
+# Shishkin mesh for boundary-layer problem (if requested)
+if BVP_NO == 1 and SHISHKIN == True:
     sigma = eps * C_sigma * np.log(NO_TRAINING_POINTS)
     left_submesh  = np.linspace(0, 1 - sigma, int(np.floor(NO_TRAINING_POINTS/2)))
     right_submesh = np.linspace(1 - sigma, 1, int( np.ceil(NO_TRAINING_POINTS/2)))
@@ -721,6 +741,6 @@ loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epoc
 # PLOTTING
 eval_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 200)
 x_eval = torch.tensor(eval_points).reshape(len(eval_points), 1).to(torch.float32)
-plot_predictions(model, x_train, x_eval, eval_nn_at_train=True, exact_sol_func=exact_sol)
-plot_loss_vs_epoch(loss_values)
-plot_ode_residuals(model, my_bvp, x_train)
+plot_predictions(model, x_train, x_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_ode_residuals(model, my_bvp, x_train, savefig=SAVE_FIGURE, plot_path=plot_path)
