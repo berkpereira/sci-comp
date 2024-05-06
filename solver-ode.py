@@ -324,8 +324,8 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
             axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-')
         
-        axes[i].set_xlabel('x')
-        axes[i].set_ylabel('y')
+        axes[i].set_xlabel('\(x\)')
+        axes[i].set_ylabel('\(y\)')
         axes[i].legend()
         # axes[i].set_title(f'NN Predictions vs Exact Solution (Eq {i+1})')
 
@@ -367,7 +367,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     
     for i in range(num_equations):
         axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
-    axes.set_xlabel('x')
+    axes.set_xlabel('\(x\)')
     axes.set_ylabel('Residual (abs. value)')
     axes.set_yscale('log')
     # axes.set_title(f'Residuals for Equation {i+1}')
