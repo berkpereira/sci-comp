@@ -15,7 +15,7 @@ plt.rcParams.update({
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d-'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 4)
+FIGSIZE = (6, 3)
 
 torch.manual_seed(42)
 
@@ -175,36 +175,43 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
 
     # Plotting
     fig, axs = plt.subplots(1, 2, figsize=FIGSIZE, subplot_kw={'projection': '3d'} if plot_type == 'surface' else None)
-    
+
+    # Colour bar specs
+    colourbar_dict = {'aspect': 10, 'shrink': 0.5}
+
     if plot_type == 'surface':
         surf = axs[0].plot_surface(x, y, u_pred_reshaped, cmap='viridis', edgecolor='none')
         # axs[0].set_title('Neural Network Predictions')
-        axs[0].set_xlabel('x')
-        axs[0].set_ylabel('y')
-        axs[0].set_zlabel('u')
-        fig.colorbar(surf, ax=axs[0], shrink=0.5, aspect=5)
+        axs[0].set_xlabel('\(x\)')
+        axs[0].set_ylabel('\(y\)')
+        axs[0].set_zlabel('\(u\)')
+        cbar0 = fig.colorbar(surf, ax=axs[0], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
+        cbar0.set_label('\(u\)')
     elif plot_type == 'contour':
         contour = axs[0].contourf(x, y, u_pred_reshaped, cmap='viridis', levels=50)
         # axs[0].set_title('Neural Network Predictions')
-        axs[0].set_xlabel('x')
-        axs[0].set_ylabel('y')
-        fig.colorbar(contour, ax=axs[0], shrink=0.5, aspect=5)
+        axs[0].set_xlabel('\(x\)')
+        axs[0].set_ylabel('\(y\)')
+        cbar0 = fig.colorbar(contour, ax=axs[0], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
+        cbar0.set_label('\(u\)')
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xy_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
         if plot_type == 'surface':
             surf = axs[1].plot_surface(x, y, u_exact_numpy, cmap='viridis', edgecolor='none')
             # axs[1].set_title('Exact Solution')
-            axs[1].set_xlabel('x')
-            axs[1].set_ylabel('y')
-            axs[1].set_zlabel('u')
-            fig.colorbar(surf, ax=axs[1], shrink=0.5, aspect=5)
+            axs[1].set_xlabel('\(x\)')
+            axs[1].set_ylabel('\(y\)')
+            axs[1].set_zlabel('\(u\)')
+            cbar1 = fig.colorbar(surf, ax=axs[1], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
+            cbar1.set_label('\(u\)')
         elif plot_type == 'contour':
             contour = axs[1].contourf(x, y, u_exact_numpy, cmap='viridis', levels=50)
             # axs[1].set_title('Exact Solution')
-            axs[1].set_xlabel('x')
-            axs[1].set_ylabel('y')
-            fig.colorbar(contour, ax=axs[1], shrink=0.5, aspect=5)
+            axs[1].set_xlabel('\(x\)')
+            axs[1].set_ylabel('\(y\)')
+            cbar1 = fig.colorbar(contour, ax=axs[1], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
+            cbar1.set_label('\(u\)')
 
     plt.tight_layout()
 
@@ -266,10 +273,11 @@ def plot_pde_residuals(model, bvp, xy_train_tensor, savefig=False, plot_path=Non
     # Plotting
     plt.figure(figsize=FIGSIZE)
     contour = plt.contourf(x, y, residuals_reshaped, cmap='viridis')
-    plt.colorbar(contour)
+    cbar = plt.colorbar(contour)
+    cbar.set_label('Residual (abs.\ value)')
     # plt.title('Residual (abs) Across the Domain')
-    plt.xlabel('x')
-    plt.ylabel('y')
+    plt.xlabel('\(x\)')
+    plt.ylabel('\(y\)')
     plt.tight_layout()
 
     if savefig:
@@ -323,7 +331,7 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 0
+BVP_NO = 1
 BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 NO_POINTS_DIR = 50

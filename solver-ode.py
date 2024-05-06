@@ -368,7 +368,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     for i in range(num_equations):
         axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
     axes.set_xlabel('\(x\)')
-    axes.set_ylabel('Residual (abs. value)')
+    axes.set_ylabel('Residual (abs.\ value)')
     axes.set_yscale('log')
     # axes.set_title(f'Residuals for Equation {i+1}')
     axes.legend()
