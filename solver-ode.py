@@ -278,7 +278,6 @@ def plot_loss_vs_epoch(loss_values, savefig=False, plot_path=None):
     plt.ylabel('Loss')
     # plt.title('Loss vs Epoch')
     plt.yscale('log')  # Set the y-axis to logarithmic scale
-    plt.legend()
     plt.tight_layout()
     
     if savefig:
@@ -371,12 +370,16 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     colours = ['blue', 'red', 'black', 'cyan', 'magenta', 'yellow'] # add more if having more ODEs
     
     for i in range(num_equations):
-        axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
+        if num_equations != 1:
+            axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
+        else:
+            axes.plot(x_train_numpy, np.abs(residuals[:, i]), color=colours[i % len(colours)], linestyle='-')
     axes.set_xlabel('\(x\)')
     axes.set_ylabel('Residual (abs.\ value)')
     axes.set_yscale('log')
     # axes.set_title(f'Residuals for Equation {i+1}')
-    axes.legend()
+    if num_equations != 1:
+        axes.legend()
 
     plt.tight_layout()
 
@@ -406,7 +409,7 @@ NO_TRAINING_POINTS = 3
 ANN_width = 1
 ANN_depth = 1
 
-SAVE_FIGURE = False
+SAVE_FIGURE = True
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -488,7 +491,7 @@ elif BVP_NO == 3:
     def exact_sol(x):
         return np.array([np.sin(x)])
 
-    no_epochs = 700
+    no_epochs = 1000
     # learning_rate = 0.008 # with 50 wide, 1 deep
     learning_rate = 0.03
 
