@@ -402,20 +402,20 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
 
 
 BVP_NO = 3
-BAR_APPROACH = True
+BAR_APPROACH = False
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 SHISHKIN = True # for boundary layer problem
 EVAL_NN_AT_TRAIN = False
 
-NO_TRAINING_POINTS = 3
+NO_TRAINING_POINTS = 5
 
 ANN_width = 1
-ANN_depth = 0
+ANN_depth = 1
 
 ########################################################################################################################
 ########################################################################################################################
 
-SAVE_FIGURE = True
+SAVE_FIGURE = False
 
 ########################################################################################################################
 ########################################################################################################################
@@ -501,10 +501,9 @@ elif BVP_NO == 3:
         return np.array([np.sin(x)])
 
     no_epochs = 1000
-    # learning_rate = 0.008 # with 50 wide, 1 deep
     learning_rate = 0.06
 
-    gamma = 1.5
+    gamma = 10
 elif BVP_NO == 4:
     # Simple exact solution
     def eqn1(x, y, y_x, y_xx):
@@ -772,6 +771,10 @@ elif OPTIMISER_NAME == 'adam':
 
 # Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)
+
+print('------------------------------------------------------------')
+print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
+print('------------------------------------------------------------')
 
 # PLOTTING
 eval_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 200)
