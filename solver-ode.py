@@ -17,6 +17,7 @@ plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-r
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 3)
+MARKER_SIZE = 4
 
 torch.manual_seed(42)
 
@@ -317,9 +318,9 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
             label_nn = f'\(y_{i+1}\), NN'
             label_exact = f'\(y_{i+1}\), Exact'
         if eval_nn_at_train:
-            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o')
+            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', marker='o')
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
             axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-')
@@ -383,12 +384,14 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
 
     plt.show()
 
+
+
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
 
 
-BVP_NO = 13
+BVP_NO = 8
 BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 SHISHKIN = True # for boundary layer problem
@@ -398,7 +401,7 @@ NO_TRAINING_POINTS = 50
 ANN_width = 50
 ANN_depth = 1
 
-SAVE_FIGURE = True
+SAVE_FIGURE = False
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
