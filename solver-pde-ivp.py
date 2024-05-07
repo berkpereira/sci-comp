@@ -54,15 +54,18 @@ class NeuralNetwork2D(nn.Module):
         self.ivp = ivp
         self.bar_approach = bar_approach
         
-        layers = [nn.Linear(in_features=input_features, out_features=hidden_units), nn.Sigmoid()]
-        
-        # Add hidden layers based on the depth parameter
-        for _ in range(depth - 1):
-            layers.append(nn.Linear(in_features=hidden_units, out_features=hidden_units))
-            layers.append(nn.Sigmoid())
 
-        # Add the final layer
-        layers.append(nn.Linear(in_features=hidden_units, out_features=output_features))
+        if depth == 0: # EDGE CASE, JUST LINEAR
+            layers = [nn.Linear(in_features=input_features, out_features=output_features)]
+        else:
+            layers = [nn.Linear(in_features=input_features, out_features=hidden_units), nn.Sigmoid()]
+            
+            for _ in range(depth - 1):
+                layers.append(nn.Linear(in_features=hidden_units, out_features=hidden_units))
+                layers.append(nn.Sigmoid())
+
+            # Add the final layer
+            layers.append(nn.Linear(in_features=hidden_units, out_features=output_features))
         
         # Create the sequential model
         self.stack = nn.Sequential(*layers)

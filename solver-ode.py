@@ -16,8 +16,10 @@ plt.rcParams.update({
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 3)
+FIGSIZE = (6, 2)
 MARKER_SIZE = 4
+EXACT_LINEWIDTH = 1.2
+ANN_LINEWIDTH = 3
 
 torch.manual_seed(42)
 
@@ -81,15 +83,18 @@ class NeuralNetwork(nn.Module):
         self.bvp = bvp
         self.bar_approach = bar_approach
         
-        layers = [nn.Linear(in_features=input_features, out_features=hidden_units), nn.Sigmoid()]
-        
-        # Add hidden layers based on the depth parameter
-        for _ in range(depth - 1):
-            layers.append(nn.Linear(in_features=hidden_units, out_features=hidden_units))
-            layers.append(nn.Sigmoid())
+        if depth == 0: # EDGE CASE
+            layers = [nn.Linear(in_features=input_features, out_features=output_features)]
+        else: # STANDARD CASE
+            layers = [nn.Linear(in_features=input_features, out_features=hidden_units), nn.Sigmoid()]
+            
+            # Add hidden layers based on the depth parameter
+            for _ in range(depth - 1):
+                layers.append(nn.Linear(in_features=hidden_units, out_features=hidden_units))
+                layers.append(nn.Sigmoid())
 
-        # Add the final layer
-        layers.append(nn.Linear(in_features=hidden_units, out_features=output_features))
+            # Add the final layer
+            layers.append(nn.Linear(in_features=hidden_units, out_features=output_features))
         
         # Create the sequential model
         self.stack = nn.Sequential(*layers)
@@ -320,10 +325,10 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
         if eval_nn_at_train:
             axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', linewidth=ANN_LINEWIDTH)
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
-            axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-')
+            axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-', linewidth=EXACT_LINEWIDTH)
         
         axes[i].set_xlabel('\(x\)')
         axes[i].set_ylabel('\(y\)')
@@ -362,9 +367,6 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     num_equations = residuals.shape[1]
     fig, axes = plt.subplots(figsize=FIGSIZE)
     colours = ['blue', 'red', 'black', 'cyan', 'magenta', 'yellow'] # add more if having more ODEs
-
-    if num_equations == 1:
-        axes = [axes]  # make it iterable if only one plot
     
     for i in range(num_equations):
         axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
@@ -391,14 +393,15 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
 ####################################################################################################
 
 
-BVP_NO = 8
+BVP_NO = 0
 BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 SHISHKIN = True # for boundary layer problem
+EVAL_NN_AT_TRAIN = False
 
-NO_TRAINING_POINTS = 50
+NO_TRAINING_POINTS = 3
 
-ANN_width = 50
+ANN_width = 1
 ANN_depth = 1
 
 SAVE_FIGURE = False
@@ -424,7 +427,7 @@ if BVP_NO == 0:
     )
     exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
-    no_epochs = 300
+    no_epochs = 50
     learning_rate = 0.004
 
     gamma = 1.5
@@ -572,7 +575,7 @@ elif BVP_NO == 8:
         return np.array([np.cos(x)])
 
     no_epochs = 5000
-    learning_rate = 0.008
+    learning_rate = 0.008 # with 50 wide, 1 deep
 
     gamma = 1.5
 elif BVP_NO == 9:
@@ -749,6 +752,6 @@ loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epoc
 # PLOTTING
 eval_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 200)
 x_eval = torch.tensor(eval_points).reshape(len(eval_points), 1).to(torch.float32)
-plot_predictions(model, x_train, x_eval, eval_nn_at_train=True, exact_sol_func=exact_sol, savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, x_train, x_eval, eval_nn_at_train=EVAL_NN_AT_TRAIN, exact_sol_func=exact_sol, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_ode_residuals(model, my_bvp, x_train, savefig=SAVE_FIGURE, plot_path=plot_path)
