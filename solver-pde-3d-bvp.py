@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+import os
 import pyvista as pv
 
 # Enable LaTeX rendering
@@ -14,7 +15,7 @@ plt.rcParams.update({
     'grid.alpha': 0.5
 })
 
-plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d-'
+plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d/'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 3)
@@ -656,7 +657,10 @@ if BVP_NO == 5:
     gamma = 100
 
 # INFORMATIVE FILE NAME FOR SAVING
-plot_path = plot_path + f'problem{str(BVP_NO)}-depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
+plot_path = plot_path + f'problem{str(BVP_NO)}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
+
+# Ensure the directory exists
+os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
 
 # Boundary conditions dictionary

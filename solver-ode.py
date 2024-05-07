@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+import os
 
 # Enable LaTeX rendering
 
@@ -12,10 +13,12 @@ plt.rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
     "axes.grid": True,
-    'grid.alpha': 0.5
+    'grid.alpha': 0.5,
+    'savefig.bbox': 'tight',
+    'savefig.pad_inches': 0.1
 })
 
-plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
+plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d/'
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 2)
@@ -407,9 +410,15 @@ EVAL_NN_AT_TRAIN = False
 NO_TRAINING_POINTS = 3
 
 ANN_width = 1
-ANN_depth = 1
+ANN_depth = 0
+
+########################################################################################################################
+########################################################################################################################
 
 SAVE_FIGURE = True
+
+########################################################################################################################
+########################################################################################################################
 
 if BVP_NO == 0:
     # BVP proposed by Kathryn
@@ -493,7 +502,7 @@ elif BVP_NO == 3:
 
     no_epochs = 1000
     # learning_rate = 0.008 # with 50 wide, 1 deep
-    learning_rate = 0.03
+    learning_rate = 0.06
 
     gamma = 1.5
 elif BVP_NO == 4:
@@ -722,7 +731,10 @@ elif BVP_NO == 13:
     gamma = 10
 
 # INFORMATIVE FILE NAME FOR SAVING
-plot_path = plot_path + f'problem{str(BVP_NO)}-depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}-'
+plot_path = plot_path + f'problem{str(BVP_NO)}/depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}'
+
+# Ensure the directory exists
+os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
 # Define BVP (routine)
 my_bvp = BVP(
