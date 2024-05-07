@@ -657,7 +657,7 @@ if BVP_NO == 5:
     gamma = 100
 
 # INFORMATIVE FILE NAME FOR SAVING
-plot_path = plot_path + f'problem{str(BVP_NO)}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}'
+plot_path = plot_path + f'problem{str(BVP_NO)}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
 
 # Ensure the directory exists
 os.makedirs(os.path.dirname(plot_path), exist_ok=True)

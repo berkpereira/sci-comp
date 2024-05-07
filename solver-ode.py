@@ -731,7 +731,7 @@ elif BVP_NO == 13:
     gamma = 10
 
 # INFORMATIVE FILE NAME FOR SAVING
-plot_path = plot_path + f'problem{str(BVP_NO)}/depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}'
+plot_path = plot_path + f'problem{str(BVP_NO)}/depth{ANN_depth}-width{ANN_width}-bar{BAR_APPROACH}-points{NO_TRAINING_POINTS}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-shishkin{SHISHKIN}-'
 
 # Ensure the directory exists
 os.makedirs(os.path.dirname(plot_path), exist_ok=True)
