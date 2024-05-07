@@ -9,7 +9,9 @@ import pyvista as pv
 plt.rcParams.update({
     'font.size': 11,
     "text.usetex": True,
-    "font.family": "serif"
+    "font.family": "serif",
+    "axes.grid": True,
+    'grid.alpha': 0.5
 })
 
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d-'
@@ -115,15 +117,20 @@ class CustomLoss(nn.Module):
             south_mask  = (xyz[:, 1] == 0)  # y = 0
             bottom_mask = (xyz[:, 2] == 0)  # z = 0
             top_mask    = (xyz[:, 2] == 1)  # z = 1
+
+            # Number of points on the boundary
+            num_boundary_points = east_mask.sum() + north_mask.sum() + west_mask.sum() + south_mask.sum() + bottom_mask.sum() + top_mask.sum()
             
             # Compute boundary errors.
             # NOTE HOW BOUNDARY CONDITION FUNCTIONS NOW SPECIFIED WITH SEPARATE ARGUMENTS FOR EACH COORDINATE (COMPARE/CONTRAST WITH 2D BVP SOLVER CODE)
-            bc_loss += torch.mean((u[east_mask]   - self.bvp.bcs['east'](xyz[east_mask, 1], xyz[east_mask, 2])).pow(2))       # func of (y, z)
-            bc_loss += torch.mean((u[north_mask]  - self.bvp.bcs['north'](xyz[north_mask, 0], xyz[north_mask, 2])).pow(2))    # func of (x, z)
-            bc_loss += torch.mean((u[west_mask]   - self.bvp.bcs['west'](xyz[west_mask, 1], xyz[west_mask, 2])).pow(2))       # func of (y, z)
-            bc_loss += torch.mean((u[south_mask]  - self.bvp.bcs['south'](xyz[south_mask, 0], xyz[south_mask, 2])).pow(2))    # func of (x, z)
-            bc_loss += torch.mean((u[bottom_mask] - self.bvp.bcs['bottom'](xyz[bottom_mask, 0], xyz[bottom_mask, 1])).pow(2)) # func of (x, y)
-            bc_loss += torch.mean((u[top_mask]    - self.bvp.bcs['top'](xyz[top_mask, 0], xyz[top_mask, 1])).pow(2))          # func of (x, y)
+            bc_loss += torch.sum((u[east_mask]   - self.bvp.bcs['east'](xyz[east_mask, 1], xyz[east_mask, 2])).pow(2))       # func of (y, z)
+            bc_loss += torch.sum((u[north_mask]  - self.bvp.bcs['north'](xyz[north_mask, 0], xyz[north_mask, 2])).pow(2))    # func of (x, z)
+            bc_loss += torch.sum((u[west_mask]   - self.bvp.bcs['west'](xyz[west_mask, 1], xyz[west_mask, 2])).pow(2))       # func of (y, z)
+            bc_loss += torch.sum((u[south_mask]  - self.bvp.bcs['south'](xyz[south_mask, 0], xyz[south_mask, 2])).pow(2))    # func of (x, z)
+            bc_loss += torch.sum((u[bottom_mask] - self.bvp.bcs['bottom'](xyz[bottom_mask, 0], xyz[bottom_mask, 1])).pow(2)) # func of (x, y)
+            bc_loss += torch.sum((u[top_mask]    - self.bvp.bcs['top'](xyz[top_mask, 0], xyz[top_mask, 1])).pow(2))          # func of (x, y)
+
+            bc_loss = bc_loss / num_boundary_points # take mean
 
             # Return total loss
             return pde_loss + self.gamma * bc_loss

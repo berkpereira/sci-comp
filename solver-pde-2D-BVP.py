@@ -9,7 +9,9 @@ from mpl_toolkits.mplot3d import Axes3D
 plt.rcParams.update({
     'font.size': 11,
     "text.usetex": True,
-    "font.family": "serif"
+    "font.family": "serif",
+    "axes.grid": True,
+    'grid.alpha': 0.5
 })
 
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d-'
@@ -111,11 +113,15 @@ class CustomLoss(nn.Module):
             west_mask =  (xy[:, 0] == 0)  # x = 0
             south_mask = (xy[:, 1] == 0)  # y = 0
 
+            # Number of points on the boundary
+            num_boundary_points = east_mask.sum() + north_mask.sum() + west_mask.sum() + south_mask.sum()
+
             # Compute boundary errors
-            bc_loss += torch.mean((u[east_mask]  - self.bvp.bcs['east'](xy[east_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[north_mask] - self.bvp.bcs['north'](xy[north_mask, 0])).pow(2))
-            bc_loss += torch.mean((u[west_mask]  - self.bvp.bcs['west'](xy[west_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[south_mask] - self.bvp.bcs['south'](xy[south_mask, 0])).pow(2))
+            bc_loss += torch.sum((u[east_mask]  - self.bvp.bcs['east'](xy[east_mask, 1])).pow(2))
+            bc_loss += torch.sum((u[north_mask] - self.bvp.bcs['north'](xy[north_mask, 0])).pow(2))
+            bc_loss += torch.sum((u[west_mask]  - self.bvp.bcs['west'](xy[west_mask, 1])).pow(2))
+            bc_loss += torch.sum((u[south_mask] - self.bvp.bcs['south'](xy[south_mask, 0])).pow(2))
+            bc_loss =  bc_loss / num_boundary_points # Take mean
 
             # Return total loss
             return pde_loss + self.gamma * bc_loss
@@ -333,7 +339,7 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 
 BVP_NO = 1
-BAR_APPROACH = True
+BAR_APPROACH = False
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 NO_POINTS_DIR = 50
 MESH_TYPE = 'uniform' # uniform, random

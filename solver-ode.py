@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 plt.rcParams.update({
     'font.size': 11,
     "text.usetex": True,
-    "font.family": "serif"
+    "font.family": "serif",
+    "axes.grid": True,
+    'grid.alpha': 0.5
 })
 
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-1d-'
@@ -325,7 +327,7 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
         if eval_nn_at_train:
             axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_exact, color='r', linestyle='--', linewidth=ANN_LINEWIDTH)
+            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', linewidth=ANN_LINEWIDTH)
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
             axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-', linewidth=EXACT_LINEWIDTH)
@@ -393,7 +395,7 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
 ####################################################################################################
 
 
-BVP_NO = 0
+BVP_NO = 3
 BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 SHISHKIN = True # for boundary layer problem
@@ -427,8 +429,8 @@ if BVP_NO == 0:
     )
     exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
-    no_epochs = 50
-    learning_rate = 0.004
+    no_epochs = 40
+    learning_rate = 0.005
 
     gamma = 1.5
 elif BVP_NO == 1:
@@ -472,18 +474,25 @@ elif BVP_NO == 2:
 
     gamma = 200
 elif BVP_NO == 3:
-    # Bit of a useless example at this point. ""Keeping it"" for naming stability only.
-    alphas = (1, 0, 0)
-    ns = (1, 0, 0)
-    domain_ends = (0, 10)
-    bcs = (0, np.sin(10) * 10)
-    g_func = lambda x: torch.sin(x) * x
-    exact_sol = lambda x: np.sin(x) * x
+    # simple sinusoidal solution
+    # dirichlet + dirichlet conditions
+    domain_ends = (0, 3 * np.pi / 2)
+    bcs = (
+        (('d', 0), ('d', -1)),
+    )
 
-    no_epochs = 20000
-    learning_rate = 0.001
+    def eqn1(x, y, y_x, y_xx):
+        return y[:,0] + torch.squeeze(y_xx[:,0])
+    ODE_funcs = [eqn1]
 
-    gamma = 0.1
+    def exact_sol(x):
+        return np.array([np.sin(x)])
+
+    no_epochs = 700
+    # learning_rate = 0.008 # with 50 wide, 1 deep
+    learning_rate = 0.03
+
+    gamma = 1.5
 elif BVP_NO == 4:
     # Simple exact solution
     def eqn1(x, y, y_x, y_xx):

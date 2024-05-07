@@ -9,7 +9,9 @@ from mpl_toolkits.mplot3d import Axes3D
 plt.rcParams.update({
     'font.size': 11,
     "text.usetex": True,
-    "font.family": "serif"
+    "font.family": "serif",
+    "axes.grid": True,
+    'grid.alpha': 0.5
 })
 
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/ivp-2d-'
@@ -113,11 +115,16 @@ class CustomLoss(nn.Module):
             west_mask =  (xt[:, 0] == 0)  # x = 0
             south_mask = (xt[:, 1] == 0)  # t = 0
 
-            # Compute boundary errors
-            bc_loss += torch.mean((u[east_mask]  - self.ivp.bcs['east'](xt[east_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[west_mask]  - self.ivp.bcs['west'](xt[west_mask, 1])).pow(2))
-            bc_loss += torch.mean((u[south_mask] - self.ivp.bcs['south'](xt[south_mask, 0])).pow(2))
+            # Number of points on the boundary
+            num_boundary_points = east_mask.sum() + west_mask.sum() + south_mask.sum()
 
+            # Compute boundary errors
+            bc_loss += torch.sum((u[east_mask]  - self.ivp.bcs['east'](xt[east_mask, 1])).pow(2))
+            bc_loss += torch.sum((u[west_mask]  - self.ivp.bcs['west'](xt[west_mask, 1])).pow(2))
+            bc_loss += torch.sum((u[south_mask] - self.ivp.bcs['south'](xt[south_mask, 0])).pow(2))
+
+            bc_loss = bc_loss / num_boundary_points # take mean
+            
             # Return total loss
             return pde_loss + self.gamma * bc_loss
         
