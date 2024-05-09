@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 import os
+import string
 
 # Enable LaTeX rendering
 
@@ -22,9 +23,9 @@ plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-r
 
 # DEFAULT FIG SIZE
 FIGSIZE = (6, 2)
-MARKER_SIZE = 4
-EXACT_LINEWIDTH = 1.2
-ANN_LINEWIDTH = 3
+MARKER_SIZE = 5
+EXACT_LINEWIDTH = 1.6
+ANN_LINEWIDTH = 2.4
 
 torch.manual_seed(42)
 
@@ -217,7 +218,7 @@ class CustomLoss(nn.Module):
 
         # Compute the ODE residuals and their mean squared error
         ode_loss = torch.mean(self.bvp.eval_ode(x, y, y_x, y_xx) ** 2)
-
+    
         if self.bar_approach:
             return ode_loss
         else:
@@ -298,22 +299,22 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
     
     # Predictions from the neural network
     # We DO need gradients sometimes for evaluation (bar approach with Neumann conditions, etc.)
-    if eval_nn_at_train:
-        y_pred_tensor = model(x_train_tensor)
-    else:
-        y_pred_tensor = model(x_eval_tensor)
+
+    y_pred_train_tensor = model(x_train_tensor)
+    y_pred_eval_tensor = model(x_eval_tensor)
     
-    y_pred_numpy = y_pred_tensor.detach().numpy()
+    y_pred_train_numpy = y_pred_train_tensor.detach().numpy()
+    y_pred_eval_numpy = y_pred_eval_tensor.detach().numpy()
     
-    num_equations = y_pred_numpy.shape[1]
+    num_equations = y_pred_train_numpy.shape[1]
     
     # Set up the figure with multiple subplots
     if num_equations == 1:
         fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
     elif num_equations == 2:
-        fig, axes = plt.subplots(num_equations, 1, figsize=FIGSIZE)
+        fig, axes = plt.subplots(num_equations, 1, figsize=(FIGSIZE[0], 3.5))
     elif num_equations == 3:
-        fig, axes = plt.subplots(num_equations, 1, figsize=(FIGSIZE[0], 5))
+        fig, axes = plt.subplots(num_equations, 1, figsize=(FIGSIZE[0], 4.2))
     
     if num_equations == 1:
         axes = [axes]  # make it iterable if only one plot
@@ -327,12 +328,13 @@ def plot_predictions(model, x_train_tensor, x_eval_tensor, eval_nn_at_train=True
             label_nn = f'\(y_{i+1}\), NN'
             label_exact = f'\(y_{i+1}\), Exact'
         if eval_nn_at_train:
-            axes[i].plot(x_train_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', marker='o', markersize=MARKER_SIZE)
+            axes[i].plot(x_train_numpy, y_pred_train_numpy[:, i], label=label_nn, color='r', linestyle='-', marker='o', markersize=MARKER_SIZE)
         else:
-            axes[i].plot(x_eval_numpy, y_pred_numpy[:, i], label=label_nn, color='r', linestyle='--', linewidth=ANN_LINEWIDTH)
+            axes[i].plot(x_eval_numpy, y_pred_eval_numpy[:, i], label=label_nn, color='r', linestyle='-', linewidth=ANN_LINEWIDTH)
+            axes[i].plot(x_train_numpy, y_pred_train_numpy[:, i], linestyle='none', color='r', marker='o', markersize=MARKER_SIZE)
         if exact_sol_func is not None:
             y_exact_numpy = exact_sol_func(x_eval_numpy)[i]
-            axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='-', linewidth=EXACT_LINEWIDTH)
+            axes[i].plot(x_eval_numpy, y_exact_numpy, label=label_exact, color='b', linestyle='--', linewidth=EXACT_LINEWIDTH)
         
         axes[i].set_xlabel('\(x\)')
         axes[i].set_ylabel('\(y\)')
@@ -374,7 +376,8 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     
     for i in range(num_equations):
         if num_equations != 1:
-            axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. {i+1}', color=colours[i % len(colours)], linestyle='-')
+            label_char = string.ascii_lowercase[i]  # Get the corresponding lowercase letter
+            axes.plot(x_train_numpy, np.abs(residuals[:, i]), label=f'Eq. ({label_char})', color=colours[i % len(colours)], linestyle='-')
         else:
             axes.plot(x_train_numpy, np.abs(residuals[:, i]), color=colours[i % len(colours)], linestyle='-')
     axes.set_xlabel('\(x\)')
@@ -395,21 +398,20 @@ def plot_ode_residuals(model, bvp, x_train_tensor, savefig=False, plot_path=None
     plt.show()
 
 
-
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
 
 
-BVP_NO = 3
-BAR_APPROACH = False
+BVP_NO = 13
+BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
 SHISHKIN = True # for boundary layer problem
 EVAL_NN_AT_TRAIN = False
 
-NO_TRAINING_POINTS = 5
+NO_TRAINING_POINTS = 10
 
-ANN_width = 1
+ANN_width = 10
 ANN_depth = 1
 
 ########################################################################################################################
@@ -441,8 +443,8 @@ if BVP_NO == 0:
     )
     exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
-    no_epochs = 40
-    learning_rate = 0.005
+    no_epochs = 80
+    learning_rate = 0.04
 
     gamma = 1.5
 elif BVP_NO == 1:
@@ -463,12 +465,25 @@ elif BVP_NO == 1:
     )
     exact_sol = lambda x: np.array([x + (np.exp(- (1 - x) / eps) - np.exp(- 1 / eps)) / (np.exp(-1 / eps) - 1)])
     
-    no_epochs = 12000
-    learning_rate = 0.01
+    # Adam, Shishkin = False
+    # no_epochs = 20000
+    # learning_rate = 0.02
+
+    # LBFGS, Shishkin = False
+    if not SHISHKIN:
+        no_epochs = 110
+        learning_rate = 0.01
+    else:
+        no_epochs = 65
+        learning_rate = 0.02
+    
 
     gamma = 1.5
 elif BVP_NO == 2:
     # Right domain end is about x = 2.55
+    # EASIER TO TRAIN than with the Neumann boundary condition at b.
+    # for near-perfect solution use bar approach, Adam, 50 wide, 1 deep, 30,000 epochs with learning rate = 0.003,
+    # with 50 uniform training points.
     def eqn1(x, y, y_x, y_xx):
         return 64 * y[:,0] + torch.squeeze(y_xx[:,0])
     
@@ -481,8 +496,8 @@ elif BVP_NO == 2:
     
     exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
     
-    no_epochs = 15000
-    learning_rate = 0.0025
+    no_epochs = 20000
+    learning_rate = 0.007
 
     gamma = 200
 elif BVP_NO == 3:
@@ -501,11 +516,11 @@ elif BVP_NO == 3:
         return np.array([np.sin(x)])
 
     no_epochs = 1000
-    learning_rate = 0.06
+    learning_rate = 0.03
 
-    gamma = 10
+    gamma = 0.1
 elif BVP_NO == 4:
-    # Simple exact solution
+    # Simple (and boring) exact solution
     def eqn1(x, y, y_x, y_xx):
         return torch.squeeze(y_xx[:,0]) + torch.squeeze(x) - y[:,0]
     
@@ -551,14 +566,14 @@ elif BVP_NO == 6:
     )
 
     def eqn1(x, y, y_x, y_xx):
-        return torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4 + y_xx[:, 0]) - y[:,0]**2
+        return torch.squeeze(3 + 2 * x - x ** 2 - 2 * x ** 3 + x ** 4 + y_xx[:]) - torch.squeeze(y[:])**2
     
     # Each function in this list should return a 1D tensor (length = number of points in x)
     ODE_funcs = [eqn1]
-    exact_sol = lambda x: 1 + x * (1 - x)
+    exact_sol = lambda x: np.array([1 + x * (1 - x)])
     
-    no_epochs = 2000
-    learning_rate = 0.005
+    no_epochs = 150
+    learning_rate = 0.008
 
     gamma = 1.5
 elif BVP_NO == 7:
@@ -601,25 +616,27 @@ elif BVP_NO == 8:
 elif BVP_NO == 9:
     # 64 y + y'' = 0
     # Right domain end is about x = 2.55
+    # MIGHT WANT TO MAKE THIS HAVE A LARGER DOMAIN FOR INCREASED DIFFICULTY
     def eqn1(x, y, y_x, y_xx):
         return 64 * y[:,0] + torch.squeeze(y_xx[:,0])
     
     ODE_funcs = [eqn1]
 
-    domain_ends = (0, 3 * np.pi / 8)
+    domain_ends = (0, np.pi / 2)
     bcs = (
         (('d', 1), ('n', 0)),
     )
     
     exact_sol = lambda x: np.array([np.cos(8 * x)]) # UNIQUE solution
     
-    no_epochs = 15000
-    learning_rate = 0.002
+    # no_epochs = 15000
+    # learning_rate = 0.02
+    no_epochs = 60
+    learning_rate = 0.1
 
     gamma = 1.5
 elif BVP_NO == 10:
     # KATHRYN PROPOSED SYSTEM for u(x), v(x)
-    # neumann + dirichlet conditions
     domain_ends = (0, 1)
     bcs = (
         (('d', 1), ('d', 1)),
@@ -639,7 +656,7 @@ elif BVP_NO == 10:
         return np.array([1 + x * (1 - x),
                          x**2 * (1 - x)])
 
-    no_epochs = 600
+    no_epochs = 40
     learning_rate = 0.03
 
     gamma = 10
@@ -680,15 +697,15 @@ elif BVP_NO == 12:
 
     domain_ends = (0, 3 * np.pi)
     bcs = (
-        (('n', -1),('r', -3, 0)),
+        (('n', -1), ('r', -3, 0)),
     )
     
     exact_sol = lambda x: np.array([np.exp(x/10) * (-3 * np.cos(x) - 0.7 * np.sin(x))]) # UNIQUE solution
     
     # LBFGS WORKS WELL!
     # GOING FROM 50 TO 150 TRAINING POINTS MAKES MASSIVE DIFFERENCE IN SOLUTION QUALITY IN BAR APPROACH
-    no_epochs = 1500
-    learning_rate = 0.004
+    no_epochs = 35
+    learning_rate = 0.3
     
     gamma = 10
 
@@ -698,7 +715,7 @@ elif BVP_NO == 12:
     # AS GENERAL ISSUE WITH GAMMA, SEEMS TO BE A PROBLEM OF: IF BOUNDARIES ARE A BIT OFF,
     # WHOLE FIT CAN LOOK OFF EVEN WITH VERY LOW LOSS VALUES (PROPAGATION OF THE WRONGNESS WHICH THE ODE CANNOT "UNDO").
 elif BVP_NO == 13:
-    # proof of concept for systems solver. UNCOUPLED equations
+    # Couple system with 3 ODEs
     domain_ends = (0, 2 * np.pi)
     bcs = (
         (('d', 1), ('d', 1)),
@@ -724,9 +741,12 @@ elif BVP_NO == 13:
                          - np.cos(x),
                          np.cos(x)])
 
-    no_epochs = 1500
-    learning_rate = 0.006
-
+    if OPTIMISER_NAME == 'adam':
+        no_epochs = 8000
+        learning_rate = 0.008
+    elif OPTIMISER_NAME == 'lbfgs':
+        no_epochs = 300
+        learning_rate = 0.2
     gamma = 10
 
 # INFORMATIVE FILE NAME FOR SAVING
@@ -776,9 +796,19 @@ print('------------------------------------------------------------')
 print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
 print('------------------------------------------------------------')
 
+print('------------------------------------------------------------')
+print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')
+print('------------------------------------------------------------')
+
 # PLOTTING
+for name, param in model.named_parameters():
+    print(f"Name: {name}")
+    print(f"Shape: {param.shape}")
+    print(f"Values: \n{param.data}\n")
+
 eval_points = np.linspace(my_bvp.domain_ends[0], my_bvp.domain_ends[1], 200)
 x_eval = torch.tensor(eval_points).reshape(len(eval_points), 1).to(torch.float32)
 plot_predictions(model, x_train, x_eval, eval_nn_at_train=EVAL_NN_AT_TRAIN, exact_sol_func=exact_sol, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_ode_residuals(model, my_bvp, x_train, savefig=SAVE_FIGURE, plot_path=plot_path)
+
