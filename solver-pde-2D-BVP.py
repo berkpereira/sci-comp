@@ -12,13 +12,15 @@ plt.rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
     "axes.grid": True,
-    'grid.alpha': 0.5
+    'grid.alpha': 0.5,
+    'savefig.bbox': 'tight',
+    'savefig.pad_inches': 0.1
 })
 
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d/'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 3)
+FIGSIZE = (6, 2.4)
 
 torch.manual_seed(42)
 
@@ -339,16 +341,22 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 1
-BAR_APPROACH = False
-OPTIMISER_NAME = 'adam' # adam, lbfgs
+BVP_NO = 2
+BAR_APPROACH = True
+OPTIMISER_NAME = 'lbfgs' # adam, lbfgs
 NO_POINTS_DIR = 50
 MESH_TYPE = 'uniform' # uniform, random
 
 hidden_units = 50
 depth = 1
 
-SAVE_FIGURE = True
+########################################################################################################################
+########################################################################################################################
+
+SAVE_FIGURE = False
+
+########################################################################################################################
+########################################################################################################################
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
@@ -437,8 +445,12 @@ if BVP_NO == 2:
     def exact_sol(xy):
         return np.sin(4 * np.pi * xy[:,0]) * np.sin(4 * np.pi * xy[:,1])
 
-    no_epochs = 650
-    learning_rate = 0.007
+    if OPTIMISER_NAME == 'adam':
+        no_epochs = 0
+        learning_rate = 0
+    elif OPTIMISER_NAME == 'lbfgs':
+        no_epochs = 500
+        learning_rate = 0.5
 
     gamma = 100
 if BVP_NO == 3:
