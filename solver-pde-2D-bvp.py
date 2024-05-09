@@ -446,11 +446,11 @@ if BVP_NO == 2:
         return np.sin(4 * np.pi * xy[:,0]) * np.sin(4 * np.pi * xy[:,1])
 
     if OPTIMISER_NAME == 'adam':
-        no_epochs = 0
-        learning_rate = 0
+        no_epochs = 5000
+        learning_rate = 0.1
     elif OPTIMISER_NAME == 'lbfgs':
-        no_epochs = 500
-        learning_rate = 0.5
+        no_epochs = 20000
+        learning_rate = 0.05
 
     gamma = 100
 if BVP_NO == 3:
@@ -574,12 +574,17 @@ if MESH_TYPE == 'uniform':
 elif MESH_TYPE == 'random':
     xy_train = random_mesh(domain_bounds, NO_POINTS_DIR, 50, 50)
 
-xy_eval = uniform_mesh(domain_bounds, 50, 50)
+xy_eval = uniform_mesh(domain_bounds, 80, 80)
 
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs)
 
+print('------------------------------------------------------------')
+print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')
+print('------------------------------------------------------------')
+
 # PLOTTING
+
 plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
