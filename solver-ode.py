@@ -783,6 +783,10 @@ input_features = 1
 
 model = NeuralNetwork(my_bvp, input_features, output_features, ANN_width, ANN_depth, bar_approach=BAR_APPROACH)
 
+print('------------------------------------------------------------')
+print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
+print('------------------------------------------------------------')
+
 # OPTIMISER
 if OPTIMISER_NAME == 'lbfgs':
     optimiser = torch.optim.LBFGS(params=model.parameters(), lr=learning_rate)
@@ -791,10 +795,6 @@ elif OPTIMISER_NAME == 'adam':
 
 # Loss
 loss_values = train_model(model, optimiser, my_bvp, loss_class, x_train, no_epochs)
-
-print('------------------------------------------------------------')
-print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
-print('------------------------------------------------------------')
 
 print('------------------------------------------------------------')
 print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')

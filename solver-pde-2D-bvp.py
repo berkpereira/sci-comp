@@ -4,6 +4,7 @@ from torch import nn
 import matplotlib.pyplot as plt
 import os 
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import ticker
 
 # Enable LaTeX rendering
 
@@ -20,7 +21,7 @@ plt.rcParams.update({
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-2d/'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 2.4)
+FIGSIZE = (6, 2)
 
 torch.manual_seed(42)
 
@@ -36,7 +37,7 @@ class BVP2D:
         Initialize a boundary value problem for a 2D second-order LINEAR PDE in a RECTANGULAR domain.
         Args:
             PDE_func (callable): Function that takes inputs xy (2D positions), u, u_x, u_y, u_xx, u_yy and returns the PDE residual.
-            domain_bounds (dict): The bounds of the RECTANGULAR domain, e.g. {'x': (0, 1), 'y': (0, 1)}.
+            domain_bounds (dict): The bounds of the     RECTANGULAR domain, e.g. {'x': (0, 1), 'y': (0, 1)}.
             bcs (dict): Boundary conditions, expected to contain functions for boundaries {'east', 'north', 'west', 'south'}.
             g_func (callable): function satisfying (Dirichlet) boundary conditions, necessary if bar scaling approach being used. Should return a tensor with shape of u (heh).
         """
@@ -163,7 +164,7 @@ def train_model(model, optimiser, bvp, loss_class, xy_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
+def plot_predictions(model, xy_train_tensor, xy_eval_tensor, cbar_ticks=None, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
     # Convert the evaluation tensor to numpy for plotting
     xy_eval_numpy = xy_eval_tensor.detach().numpy()
     
@@ -204,6 +205,10 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
         axs[0].set_ylabel('\(y\)')
         cbar0 = fig.colorbar(contour, ax=axs[0], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
         cbar0.set_label('\(u\)')
+    
+    # Set colour bar ticks
+    if cbar_ticks is not None:
+        cbar0.set_ticks(cbar_ticks)
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xy_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
@@ -222,6 +227,10 @@ def plot_predictions(model, xy_train_tensor, xy_eval_tensor, eval_nn_at_train=Tr
             axs[1].set_ylabel('\(y\)')
             cbar1 = fig.colorbar(contour, ax=axs[1], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
             cbar1.set_label('\(u\)')
+        
+        # Set colour bar ticks
+        if cbar_ticks is not None:
+            cbar1.set_ticks(cbar_ticks)
 
     plt.tight_layout()
 
@@ -341,9 +350,9 @@ def uniform_mesh(domain_bounds, x_points, y_points):
 ####################################################################################################
 ####################################################################################################
 
-BVP_NO = 2
+BVP_NO = 4
 BAR_APPROACH = True
-OPTIMISER_NAME = 'lbfgs' # adam, lbfgs
+OPTIMISER_NAME = 'adam' # adam, lbfgs
 NO_POINTS_DIR = 50
 MESH_TYPE = 'uniform' # uniform, random
 
@@ -383,9 +392,10 @@ if BVP_NO == 0:
         # Since the boundary conditions and the PDE suggest a trivial solution:
         return torch.zeros(xy.shape[0], 1)
 
-    no_epochs = 500
+    no_epochs = 200
     learning_rate = 0.05
 
+    cbar_ticks = None
     gamma=10
 if BVP_NO == 1:
     # Laplace's equation
@@ -414,6 +424,7 @@ if BVP_NO == 1:
     no_epochs = 1500
     learning_rate = 0.05
 
+    cbar_ticks = None
     gamma = 100
 if BVP_NO == 2:
     # Laplace's equation, higher frequency!
@@ -449,9 +460,10 @@ if BVP_NO == 2:
         no_epochs = 5000
         learning_rate = 0.1
     elif OPTIMISER_NAME == 'lbfgs':
-        no_epochs = 20000
+        no_epochs = 30000
         learning_rate = 0.05
 
+    cbar_ticks = np.linspace(-1,1,5)
     gamma = 100
 if BVP_NO == 3:
     # Laplace's equation
@@ -482,6 +494,7 @@ if BVP_NO == 3:
     no_epochs = 500
     learning_rate = 0.1
 
+    cbar_ticks = None
     gamma = 10
 if BVP_NO == 4:
     # Laplace's equation, linear solution
@@ -512,6 +525,7 @@ if BVP_NO == 4:
     no_epochs = 100
     learning_rate = 0.1
 
+    cbar_ticks = None
     gamma = 20
 if BVP_NO == 5:
     # Laplace's equation
@@ -540,6 +554,7 @@ if BVP_NO == 5:
     no_epochs = 5000
     learning_rate = 0.03
 
+    cbar_ticks = None
     gamma = 100
 
 # INFORMATIVE FILE NAME FOR SAVING
@@ -561,6 +576,10 @@ bvp = BVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_fu
 
 # Create the neural network
 model = NeuralNetwork2D(bvp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
+
+print('------------------------------------------------------------')
+print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
+print('------------------------------------------------------------')
 
 # Optimizer
 optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -585,7 +604,7 @@ print('------------------------------------------------------------')
 
 # PLOTTING
 
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
-plot_predictions(model, xy_train, xy_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, xy_train, xy_eval, cbar_ticks=cbar_ticks, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, xy_train, xy_eval, cbar_ticks=cbar_ticks, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_pde_residuals(model, bvp, xy_train, savefig=SAVE_FIGURE, plot_path=plot_path)

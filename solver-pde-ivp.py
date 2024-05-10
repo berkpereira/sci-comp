@@ -350,7 +350,13 @@ MESH_TYPE = 'uniform' # uniform, random
 hidden_units = 50
 depth = 1
 
-SAVE_FIGURE = True
+########################################################################################################################
+########################################################################################################################
+
+SAVE_FIGURE = False
+
+########################################################################################################################
+########################################################################################################################
 
 if IVP_NO == 0:
     # Heat equation, TRIVIAL
@@ -508,6 +514,11 @@ ivp = IVP2D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_fu
 # Create the neural network
 model = NeuralNetwork2D(ivp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
+
+print('------------------------------------------------------------')
+print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
+print('------------------------------------------------------------')
+
 # Optimizer
 if OPTIMISER_NAME == 'adam':
     optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -527,6 +538,10 @@ xt_eval  = uniform_mesh(domain_bounds, 50, 50)
 
 # Training the model
 loss_values = train_model(model, optimiser, ivp, loss_class, xt_train, no_epochs)
+
+print('------------------------------------------------------------')
+print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')
+print('------------------------------------------------------------')
 
 # PLOTTING
 plot_predictions(model, xt_train, xt_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)

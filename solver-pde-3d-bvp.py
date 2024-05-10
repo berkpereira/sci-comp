@@ -18,7 +18,7 @@ plt.rcParams.update({
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/bvp-3d/'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 3)
+FIGSIZE = (3, 3)
 
 torch.manual_seed(42)
 
@@ -249,11 +249,11 @@ def plot_volume_rendering_mlab(model, xyz_eval, eval_nn_at_train=False, exact_so
 
 def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train=False, exact_sol_func=None, savefig=False, plot_path=plot_path, scale_image: int = 1):
     # Formatting specs
-    pv_font_size = scale_image * 10
+    pv_font_size = scale_image * 11
     pv_font_family = 'times' # times, arial, courier
     pv_bar_width = 0.5
     pv_bar_position_x = (1 - pv_bar_width) / 2
-    pv_n_labels = 5
+    pv_n_labels = 4
     pv_title_position = 'upper_edge'
     pv_title_font_size = scale_image * 12
     scalar_bar_dict = {'title': '', 'width': pv_bar_width, 'position_x': pv_bar_position_x, 'label_font_size': pv_font_size, 'font_family': pv_font_family, 'n_labels': pv_n_labels, 'use_opacity': False, 'vertical': False}
@@ -280,8 +280,10 @@ def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train
     grid.point_data['values'] = u_pred_numpy.flatten(order='F')  # Assign values to the grid points
 
     # Set up plotter for NN prediction
-    plotter_nn = pv.Plotter(window_size=(scale_image * 48 * FIGSIZE[0], scale_image * 96 * FIGSIZE[1])) # sizes in pixels
-    plotter_nn.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
+    plotter_nn = pv.Plotter(window_size=(scale_image * 96 * FIGSIZE[0], scale_image * 96 * FIGSIZE[1])) # sizes in pixels
+    volume_nn = plotter_nn.add_volume(grid, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
+
+    
     # plotter_nn.add_text("NN Prediction", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
 
     if savefig:
@@ -297,7 +299,7 @@ def plot_volume_rendering_pyvista(model, xyz_eval, opacity_str, eval_nn_at_train
         grid_exact.point_data['values'] = u_exact_numpy.flatten(order='F')
 
         # Setup plotter for exact solution
-        plotter_exact = pv.Plotter(window_size=(scale_image * 48 * FIGSIZE[0], scale_image* 96 * FIGSIZE[1])) # sizes in pixels
+        plotter_exact = pv.Plotter(window_size=(scale_image * 96 * FIGSIZE[0], scale_image* 96 * FIGSIZE[1])) # sizes in pixels
         plotter_exact.add_volume(grid_exact, scalars='values', cmap='inferno', opacity=opacity_str, scalar_bar_args=scalar_bar_dict)
         # plotter_exact.add_text("Exact Solution", font_size=pv_title_font_size, font=pv_font_family, position=pv_title_position)
 
@@ -453,8 +455,18 @@ MESH_TYPE = 'uniform' # uniform, random
 hidden_units = 50
 depth = 1
 
-SAVE_FIGURE = True
-SCALE_IMAGE = 6
+########################################################################################################################
+########################################################################################################################
+
+SAVE_FIGURE = False
+
+
+SCALE_IMAGE = 9
+# SCALE_IMAGE = 1
+
+########################################################################################################################
+########################################################################################################################
+
 
 if BVP_NO == 0:
     # Laplace's equation, TRIVIAL solution
@@ -525,7 +537,7 @@ if BVP_NO == 1:
     # For plotting isosurfaces
     level = 0.5
 if BVP_NO == 2:
-    # Laplace's equation, higher frequency (modest for 3D...)!
+    # Poisson's equation, higher frequency (modest for 3D...)!
 
     def PDE_func(xyz, u, u_x, u_y, u_z, u_xx, u_yy, u_zz):
         return torch.squeeze(u_xx + u_yy + u_zz) + (3 * (2 * np.pi)**2 * torch.sin(2 * np.pi * torch.squeeze(xyz[:,0])) * torch.sin(2 * np.pi * torch.squeeze(xyz[:,1])) * torch.sin(2 * np.pi * torch.squeeze(xyz[:,2])))
@@ -553,11 +565,13 @@ if BVP_NO == 2:
     def exact_sol(xyz):
         return np.sin(2 * np.pi * xyz[:,0]) * np.sin(2 * np.pi * xyz[:,1]) * np.sin(2 * np.pi * xyz[:,2])
 
-    # no_epochs = 2000 # with Adam
-    no_epochs = 10 # with LBFGS
-    
-    # learning_rate = 0.12 # with Adam
-    learning_rate = 0.1 # with LBFGS
+    if OPTIMISER_NAME == 'adam':
+        learning_rate = 0.12
+        no_epochs = 2000
+    elif OPTIMISER_NAME == 'lbfgs':
+        learning_rate = 0.1
+        no_epochs = 200
+        # no_epochs = 3 # for trying out images
 
     gamma = 100
     
@@ -679,6 +693,11 @@ bvp = BVP3D(PDE_func=PDE_func, domain_bounds=domain_bounds, bcs=bcs, g_func=g_fu
 # Create the neural network
 model = NeuralNetwork3D(bvp, hidden_units=hidden_units, depth=depth, bar_approach=BAR_APPROACH)
 
+
+print('------------------------------------------------------------')
+print(f'MODEL HAS {sum(p.numel() for p in model.parameters() if p.requires_grad)} TRAINABLE PARAMETERS')
+print('------------------------------------------------------------')
+
 # Optimizer
 if OPTIMISER_NAME == 'lbfgs':
     optimiser = torch.optim.LBFGS(model.parameters(), lr=learning_rate)
@@ -699,8 +718,15 @@ xyz_eval  = uniform_mesh(domain_bounds, 50, 50, 50)
 # Training the model
 loss_values = train_model(model, optimiser, bvp, loss_class, xyz_train, no_epochs)
 
+
+
+print('------------------------------------------------------------')
+print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')
+print('------------------------------------------------------------')
+
+
 # PLOTTING
-# plot_loss_vs_epoch(loss_values)
+plot_loss_vs_epoch(loss_values)
 # plot_pde_residuals(model, bvp, xyz_train)
 
 # from mpl_toolkits.mplot3d import Axes3D
