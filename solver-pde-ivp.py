@@ -18,7 +18,7 @@ plt.rcParams.update({
 plot_path = '/Users/gabrielpereira/OneDrive - Nexus365/ox-mmsc-cloud/computing-report/report/plots/ivp-2d/'
 
 # DEFAULT FIG SIZE
-FIGSIZE = (6, 3)
+FIGSIZE = (6, 2)
 
 torch.manual_seed(42)
 
@@ -163,7 +163,7 @@ def train_model(model, optimiser, ivp, loss_class, xt_train, no_epochs):
 
     return loss_values  # Return the list of loss values
 
-def plot_predictions(model, xt_train_tensor, xt_eval_tensor, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
+def plot_predictions(model, xt_train_tensor, xt_eval_tensor,  cbar_ticks=None, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
     # Convert the evaluation tensor to numpy for plotting
     xt_eval_numpy = xt_eval_tensor.detach().numpy()
     
@@ -204,6 +204,10 @@ def plot_predictions(model, xt_train_tensor, xt_eval_tensor, eval_nn_at_train=Tr
         axs[0].set_ylabel('\(t\)')
         cbar0 = fig.colorbar(contour, ax=axs[0], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
         cbar0.set_label('\(u\)')
+    
+    # Set colour bar ticks
+    if cbar_ticks is not None:
+        cbar0.set_ticks(cbar_ticks)
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xt_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
@@ -222,6 +226,10 @@ def plot_predictions(model, xt_train_tensor, xt_eval_tensor, eval_nn_at_train=Tr
             axs[1].set_ylabel('\(t\)')
             cbar1 = fig.colorbar(contour, ax=axs[1], shrink=colourbar_dict['shrink'], aspect=colourbar_dict['aspect'])
             cbar1.set_label('\(u\)')
+
+        # Set colour bar ticks
+        if cbar_ticks is not None:
+            cbar1.set_ticks(cbar_ticks)
 
     plt.tight_layout()
 
@@ -344,10 +352,10 @@ def uniform_mesh(domain_bounds, x_points, t_points):
 IVP_NO = 1
 BAR_APPROACH = True
 OPTIMISER_NAME = 'adam' # adam, lbfgs
-NO_POINTS_DIR = 25
+NO_POINTS_DIR = 10
 MESH_TYPE = 'uniform' # uniform, random
 
-hidden_units = 50
+hidden_units = 10
 depth = 1
 
 ########################################################################################################################
@@ -400,7 +408,7 @@ elif IVP_NO == 1:
         return torch.sin(np.pi * x)
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 't': (0, 0.2)}
+    domain_bounds = {'x': (0, 1), 't': (0, 0.1)}
 
     # Function satisfying boundary conditions, for BAR APPROACH
     def g_func(xt):
@@ -409,9 +417,10 @@ elif IVP_NO == 1:
     def exact_sol(xt):
         return np.exp(- np.pi**2 * xt[:,1]) * np.sin(np.pi * xt[:,0])
 
-    no_epochs = 3000
-    learning_rate = 0.03
+    no_epochs = 10000
+    learning_rate = 0.05
 
+    cbar_ticks = np.linspace(0, 1, 5)
     gamma=10
 elif IVP_NO == 2:
         # Heat equation
@@ -544,7 +553,7 @@ print(f'FINAL LOSS ACHIEVED: {loss_values[-1]:.2e}')
 print('------------------------------------------------------------')
 
 # PLOTTING
-plot_predictions(model, xt_train, xt_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
-plot_predictions(model, xt_train, xt_eval, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, xt_train, xt_eval, cbar_ticks=cbar_ticks, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='surface', savefig=SAVE_FIGURE, plot_path=plot_path)
+plot_predictions(model, xt_train, xt_eval, cbar_ticks=cbar_ticks, eval_nn_at_train=False, exact_sol_func=exact_sol, plot_type='contour', savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_loss_vs_epoch(loss_values, savefig=SAVE_FIGURE, plot_path=plot_path)
 plot_pde_residuals(model, ivp, xt_train, savefig=SAVE_FIGURE, plot_path=plot_path)
