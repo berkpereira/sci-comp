@@ -349,13 +349,13 @@ def uniform_mesh(domain_bounds, x_points, t_points):
 ####################################################################################################
 ####################################################################################################
 
-IVP_NO = 1
+IVP_NO = 3
 BAR_APPROACH = True
-OPTIMISER_NAME = 'adam' # adam, lbfgs
-NO_POINTS_DIR = 10
+OPTIMISER_NAME = 'lbfgs' # adam, lbfgs
+NO_POINTS_DIR = 20
 MESH_TYPE = 'uniform' # uniform, random
 
-hidden_units = 10
+hidden_units = 50
 depth = 1
 
 ########################################################################################################################
@@ -473,7 +473,7 @@ elif IVP_NO == 3:
         return output
 
     # Domain bounds
-    domain_bounds = {'x': (0, 1), 't': (0, 0.1)}
+    domain_bounds = {'x': (0, 1), 't': (0, 0.05)}
 
     # Function satisfying boundary conditions, for BAR APPROACH
     def g_func(xt):
@@ -495,9 +495,14 @@ elif IVP_NO == 3:
         
         return result
 
-    no_epochs = 30000
-    learning_rate = 0.01
-
+    if OPTIMISER_NAME == 'adam':
+        no_epochs = 30000
+        learning_rate = 0.02
+    elif OPTIMISER_NAME == 'lbfgs':
+        no_epochs = 400
+        learning_rate = 0.1
+    
+    cbar_ticks = None
     gamma=5
 
 # INFORMATIVE FILE NAME FOR SAVING
