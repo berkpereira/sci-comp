@@ -166,6 +166,9 @@ def train_model(model, optimiser, ivp, loss_class, xt_train, no_epochs):
 def plot_predictions(model, xt_train_tensor, xt_eval_tensor,  cbar_ticks=None, eval_nn_at_train=True, exact_sol_func=None, plot_type='surface', savefig=False, plot_path=None):
     # Convert the evaluation tensor to numpy for plotting
     xt_eval_numpy = xt_eval_tensor.detach().numpy()
+
+    # Max across both solutions over the entire (eval mesh) domain
+    max_val = float(max(torch.max(model(xt_eval)), np.max(exact_sol(xt_eval_numpy))))
     
     # Predictions from the neural network
     if eval_nn_at_train:
@@ -208,6 +211,8 @@ def plot_predictions(model, xt_train_tensor, xt_eval_tensor,  cbar_ticks=None, e
     # Set colour bar ticks
     if cbar_ticks is not None:
         cbar0.set_ticks(cbar_ticks)
+    else:
+        cbar0.set_ticks(np.linspace(0, max_val, 5))
 
     if exact_sol_func is not None:
         u_exact_numpy = exact_sol_func(xt_eval_numpy).reshape(num_points_per_dim, num_points_per_dim)
@@ -230,6 +235,8 @@ def plot_predictions(model, xt_train_tensor, xt_eval_tensor,  cbar_ticks=None, e
         # Set colour bar ticks
         if cbar_ticks is not None:
             cbar1.set_ticks(cbar_ticks)
+        else:
+            cbar1.set_ticks(np.linspace(0, max_val, 5))
 
     plt.tight_layout()
 
@@ -352,7 +359,7 @@ def uniform_mesh(domain_bounds, x_points, t_points):
 IVP_NO = 3
 BAR_APPROACH = True
 OPTIMISER_NAME = 'lbfgs' # adam, lbfgs
-NO_POINTS_DIR = 20
+NO_POINTS_DIR = 50
 MESH_TYPE = 'uniform' # uniform, random
 
 hidden_units = 50
@@ -453,7 +460,7 @@ elif IVP_NO == 2:
 elif IVP_NO == 3:
     # Heat equation, sawtooth wave
     alpha = 1
-    N = 3 # must be positive integer
+    N = 5 # must be positive integer
 
     # works decently well with alpha = 1, N = 3 (weak...), Adam, lr = 0.01, 30,000 epochs, 50 points in x, 20 in t (from 0 to 0.1),
     # 50 wide, 1 deep
@@ -497,10 +504,10 @@ elif IVP_NO == 3:
 
     if OPTIMISER_NAME == 'adam':
         no_epochs = 30000
-        learning_rate = 0.02
+        learning_rate = 0.06
     elif OPTIMISER_NAME == 'lbfgs':
-        no_epochs = 400
-        learning_rate = 0.1
+        no_epochs = 1500
+        learning_rate = 0.02
     
     cbar_ticks = None
     gamma=5
