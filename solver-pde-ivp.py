@@ -460,7 +460,7 @@ elif IVP_NO == 2:
 elif IVP_NO == 3:
     # Heat equation, sawtooth wave
     alpha = 1
-    N = 5 # must be positive integer
+    N = 4 # must be positive integer
 
     # works decently well with alpha = 1, N = 3 (weak...), Adam, lr = 0.01, 30,000 epochs, 50 points in x, 20 in t (from 0 to 0.1),
     # 50 wide, 1 deep
@@ -507,13 +507,16 @@ elif IVP_NO == 3:
         learning_rate = 0.06
     elif OPTIMISER_NAME == 'lbfgs':
         no_epochs = 1500
-        learning_rate = 0.02
+        learning_rate = 0.008
     
     cbar_ticks = None
     gamma=5
 
 # INFORMATIVE FILE NAME FOR SAVING
-plot_path = plot_path + f'problem{str(IVP_NO)}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
+if IVP_NO == 3: # N is defined and relevant
+    plot_path = plot_path + f'problem{str(IVP_NO)}/{N}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
+else:
+    plot_path = plot_path + f'problem{str(IVP_NO)}/depth{depth}-width{hidden_units}-bar{BAR_APPROACH}-mesh{MESH_TYPE}-points{NO_POINTS_DIR}-optimiser{OPTIMISER_NAME}-epochs{no_epochs}-lr{learning_rate}-gamma{gamma}-'
 
 # Ensure the directory exists
 os.makedirs(os.path.dirname(plot_path), exist_ok=True)
